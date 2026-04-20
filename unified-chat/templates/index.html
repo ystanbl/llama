@@ -1,0 +1,3976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Local AI Chat</title>
+<style>
+:root {
+  --bg-main: #343541;
+  --bg-sidebar: #202123;
+  --bg-message-user: #343541;
+  --bg-message-ai: #444654;
+  --text-primary: #ececf1;
+  --text-secondary: #8e8ea0;
+  --border: #4e4f60;
+  --accent: #10a37f;
+  --accent-hover: #1a7f64;
+  --input-bg: #40414f;
+  --danger: #ef4444;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  height: 100vh;
+  display: flex;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 260px;
+  background: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  flex-shrink: 0;
+}
+.sidebar-header {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.sidebar-header h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.sidebar-header .subtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.new-chat-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+.new-chat-btn:hover { background: rgba(255,255,255,0.05); }
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+.chat-list-item {
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s;
+}
+.chat-list-item:hover { background: rgba(255,255,255,0.05); }
+.chat-list-item.active { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+.resource-info {
+  padding: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border);
+  line-height: 1.6;
+}
+.grafana-link {
+  display: block;
+  padding: 10px 12px;
+  margin: 0 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 13px;
+  text-align: center;
+  transition: background 0.15s;
+}
+.grafana-link:hover { background: rgba(255,255,255,0.05); }
+/* tune status/results are inline now, using grafana-link style for the buttons */
+.tune-status {
+  font-size: 11px;
+  color: var(--accent);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.tune-results {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+  line-height: 1.4;
+}
+.tune-results table { width: 100%; border-collapse: collapse; }
+.tune-results td { padding: 1px 4px; }
+.tune-results .fastest { color: var(--accent); font-weight: 600; }
+.tuned-badge {
+  display: inline-block;
+  font-size: 9px;
+  background: var(--accent);
+  color: white;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+
+/* Main */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  color: var(--text-secondary);
+}
+.welcome h1 { font-size: 28px; color: var(--text-primary); font-weight: 600; }
+.welcome p { font-size: 14px; max-width: 500px; text-align: center; line-height: 1.6; }
+.welcome .hint-cards {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.welcome .hint-card {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 18px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 220px;
+  transition: background 0.15s;
+}
+.welcome .hint-card:hover { background: rgba(255,255,255,0.08); }
+
+.message {
+  padding: 24px 0;
+  display: flex;
+  justify-content: center;
+}
+.message.user { background: var(--bg-message-user); }
+.message.assistant { background: var(--bg-message-ai); }
+.message-inner {
+  max-width: 768px;
+  width: 100%;
+  padding: 0 24px;
+  display: flex;
+  gap: 16px;
+}
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.avatar.user-avatar { background: #5436DA; }
+.avatar.ai-avatar { background: var(--accent); }
+.avatar.img-avatar { background: #e67e22; }
+.message-content {
+  flex: 1;
+  line-height: 1.7;
+  font-size: 15px;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.message-content pre {
+  background: #1e1e2e;
+  border-radius: 6px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 8px 0;
+  font-size: 13px;
+}
+.message-content code {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+}
+.message-content p { margin-bottom: 8px; }
+.message-content img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 8px 0;
+  cursor: pointer;
+}
+.message-content img:hover { opacity: 0.9; }
+.gen-info {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  font-style: italic;
+}
+
+/* Input area */
+.input-area {
+  padding: 16px 24px 24px;
+  display: flex;
+  justify-content: center;
+}
+.input-wrap {
+  max-width: 768px;
+  width: 100%;
+  position: relative;
+}
+.input-row {
+  display: flex;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.input-row:focus-within { border-color: rgba(255,255,255,0.3); }
+#chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 14px 16px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: inherit;
+  resize: none;
+  max-height: 200px;
+  line-height: 1.5;
+}
+#chat-input::placeholder { color: var(--text-secondary); }
+.send-btn {
+  background: var(--accent);
+  border: none;
+  color: white;
+  padding: 0 16px;
+  cursor: pointer;
+  font-size: 18px;
+  transition: background 0.15s;
+}
+.send-btn:hover { background: var(--accent-hover); }
+.send-btn:disabled { background: var(--border); cursor: not-allowed; }
+.input-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+/* Spinner */
+.typing-indicator span {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--text-secondary);
+  border-radius: 50%;
+  margin-right: 4px;
+  animation: bounce 1.2s infinite ease-in-out;
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+
+/* Image generation progress */
+.img-progress {
+  background: var(--input-bg);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.img-progress-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.progress-bar-wrap {
+  width: 100%;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  width: 0%;
+  transition: width 0.5s ease;
+}
+.progress-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+}
+.progress-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+.progress-controls button {
+  padding: 5px 14px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.progress-controls button:hover { background: rgba(255,255,255,0.08); }
+.progress-controls button.cancel { border-color: var(--danger); color: var(--danger); }
+
+/* Music player */
+.music-result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.music-result .description {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.music-player {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.music-player audio {
+  width: 100%;
+  margin-top: 8px;
+}
+.music-player .player-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sheet-music-wrap {
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+  cursor: pointer;
+  position: relative;
+}
+.sheet-music-wrap img {
+  max-width: 100%;
+  height: auto;
+}
+.sheet-music-toggle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-top: 4px;
+  user-select: none;
+}
+.lilypond-source {
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  display: none;
+}
+.music-gen-time {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+.progress-controls button.cancel:hover { background: rgba(239,68,68,0.1); }
+
+/* Modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 100;
+  justify-content: center;
+  align-items: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 700px;
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 24px;
+}
+.modal h2 { font-size: 18px; margin-bottom: 16px; }
+.modal h3 { font-size: 14px; margin: 16px 0 8px; color: var(--text-secondary); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.modal-close {
+  float: right;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+}
+.modal-close:hover { color: var(--text-primary); }
+.modal-wide { width: 900px; }
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 12px;
+}
+.status-card {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.status-card h3 {
+  font-size: 14px;
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  padding: 0;
+  color: var(--text-primary);
+}
+.st-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.st-dot.running { background: var(--accent); }
+.st-dot.idle { background: var(--text-secondary); }
+.st-dot.unreachable { background: var(--danger); }
+.st-dot.generating {
+  background: #f59e0b;
+  animation: pulse 1.5s infinite;
+}
+.st-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.st-row:last-child { border-bottom: none; }
+.st-label { color: var(--text-secondary); }
+.st-value { text-align: right; max-width: 60%; word-break: break-all; }
+.st-task {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 6px;
+  padding: 10px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+.st-task .prompt {
+  color: var(--text-primary);
+  font-style: italic;
+  margin: 4px 0;
+  word-break: break-word;
+}
+.st-idle {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-top: 10px;
+}
+.st-bar {
+  height: 5px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 3px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+.st-bar-fill {
+  height: 100%;
+  background: #f59e0b;
+  border-radius: 3px;
+  transition: width 0.5s;
+}
+.st-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.st-btns button {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+.st-btns button:hover { opacity: 0.85; }
+.st-btns button:disabled { opacity: 0.35; cursor: not-allowed; }
+.st-btn-cancel { background: var(--danger); color: white; }
+.st-btn-warn { background: #f59e0b; color: #1a1a1a; }
+.st-btn-restart { background: #f59e0b; color: #1a1a1a; }
+.model-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.model-table th { text-align: left; color: var(--text-secondary); font-weight: 500; padding: 6px 8px; font-size: 11px; }
+.model-table td { padding: 6px 8px; border-top: 1px solid var(--border); }
+.model-table .active-badge { color: var(--accent); font-weight: 600; font-size: 11px; }
+.model-actions { display: flex; gap: 4px; }
+.model-actions button {
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.model-actions button:hover { background: rgba(255,255,255,0.08); }
+.model-actions button.danger { border-color: var(--danger); color: var(--danger); }
+.model-actions button.danger:hover { background: rgba(239,68,68,0.1); }
+.model-actions button.primary { border-color: var(--accent); color: var(--accent); }
+.model-actions button.primary:hover { background: rgba(16,163,127,0.1); }
+.model-pull-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.model-pull-row input, .model-pull-row select {
+  flex: 1;
+  padding: 8px 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.model-pull-row button {
+  padding: 8px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.model-pull-row button:hover { background: var(--accent-hover); }
+.model-pull-row button:disabled { background: var(--border); border-color: var(--border); cursor: not-allowed; }
+.model-progress {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--accent);
+}
+.popular-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.popular-models button {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+.popular-models button:hover { background: rgba(255,255,255,0.05); color: var(--text-primary); }
+.search-result {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  transition: background 0.15s;
+}
+.search-result:hover { background: rgba(255,255,255,0.03); }
+.search-result .sr-info { flex: 1; min-width: 0; }
+.search-result .sr-name { font-weight: 600; color: var(--text-primary); }
+.search-result .sr-author { color: var(--text-secondary); font-size: 11px; }
+.search-result .sr-meta { color: var(--text-secondary); font-size: 10px; margin-top: 2px; }
+.search-result .sr-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+.search-result .sr-tag { font-size: 9px; background: var(--input-bg); padding: 1px 5px; border-radius: 3px; color: var(--text-secondary); }
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 3px;
+  font-size: 12px;
+}
+.file-item .fi-name { flex: 1; word-break: break-all; }
+.file-item .fi-size { color: var(--text-secondary); font-size: 11px; margin: 0 12px; white-space: nowrap; }
+.sr-inline-files { margin-top: 6px; padding: 6px 0 0 0; border-top: 1px solid var(--border); }
+
+/* Parameters Panel */
+.params-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.params-toggle:hover { color: var(--text-primary); }
+.params-toggle .gear { font-size: 16px; }
+.params-panel {
+  display: none;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.params-panel.open { display: block; }
+.params-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+.params-tab {
+  flex: 1;
+  padding: 8px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.params-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.params-tab:hover { color: var(--text-primary); }
+.params-body { padding: 12px 14px; }
+.params-section { display: none; }
+.params-section.active { display: block; }
+.param-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+.param-group { display: flex; flex-direction: column; gap: 3px; }
+.param-group.wide { grid-column: span 2; }
+.param-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.param-label .param-val { color: var(--accent); font-weight: 600; }
+.param-hint {
+  font-size: 9px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  margin-top: 2px;
+  line-height: 1.2;
+}
+.param-group input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  height: 4px;
+}
+.param-group input[type="number"],
+.param-group input[type="text"],
+.param-group select {
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.param-group textarea {
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  resize: vertical;
+  min-height: 36px;
+  font-family: inherit;
+}
+.params-reset {
+  margin-top: 8px;
+  padding: 4px 12px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+.params-reset:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+
+/* Workspace panel */
+.ws-section { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 8px; }
+.ws-header { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; }
+.ws-header span { font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+.ws-add-btn {
+  background: none; border: 1px solid var(--border); color: var(--text-secondary);
+  border-radius: 4px; font-size: 11px; padding: 2px 8px; cursor: pointer;
+}
+.ws-add-btn:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+.ws-select {
+  width: 100%; padding: 4px 8px; margin: 4px 8px; font-size: 12px;
+  background: var(--input-bg); color: var(--text-primary); border: 1px solid var(--border);
+  border-radius: 4px; width: calc(100% - 16px);
+}
+.file-tree {
+  max-height: 300px; overflow-y: auto; padding: 4px 0; font-size: 11px;
+  font-family: 'Consolas', 'Courier New', monospace; line-height: 1.6;
+}
+.file-tree::-webkit-scrollbar { width: 4px; }
+.file-tree::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.ft-item {
+  padding: 1px 8px; cursor: pointer; display: flex; align-items: center;
+  gap: 4px; color: var(--text-secondary); white-space: nowrap; overflow: hidden;
+}
+.ft-item:hover { background: var(--bg-message-ai); color: var(--text-primary); }
+.ft-item .ft-icon { flex-shrink: 0; width: 14px; text-align: center; font-size: 10px; }
+.ft-item .ft-name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.ft-item .ft-pin {
+  visibility: hidden; background: none; border: none; color: var(--accent);
+  cursor: pointer; font-size: 11px; padding: 0 2px; flex-shrink: 0;
+}
+.ft-item:hover .ft-pin { visibility: visible; }
+.ft-dir { color: var(--text-primary); font-weight: 600; }
+
+/* Workspace bar */
+.ws-bar {
+  padding: 6px 16px; background: var(--bg-sidebar); border-bottom: 1px solid var(--border);
+  font-size: 12px; display: flex; justify-content: space-between; align-items: center;
+}
+.ws-bar-info { display: flex; align-items: center; gap: 8px; }
+.ws-bar-name { font-weight: 600; color: var(--accent); }
+.ws-bar-count { color: var(--text-secondary); }
+.ws-bar-tokens { color: var(--text-secondary); font-size: 11px; }
+.ws-bar-close {
+  background: none; border: 1px solid var(--border); color: var(--text-secondary);
+  border-radius: 4px; font-size: 11px; padding: 2px 8px; cursor: pointer;
+}
+.ws-bar-close:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+
+/* Toast notification */
+.toast {
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+  background: var(--accent); color: #fff; padding: 8px 18px; border-radius: 8px;
+  font-size: 13px; z-index: 9999; opacity: 0; transition: opacity 0.3s;
+  pointer-events: none; box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+}
+.toast.show { opacity: 1; }
+
+/* Context badges */
+.ctx-badges { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 0; }
+.ctx-badge {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
+  background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px;
+  font-size: 11px; color: var(--accent); font-family: monospace;
+}
+.ctx-badge button {
+  background: none; border: none; color: var(--text-secondary); cursor: pointer;
+  font-size: 13px; line-height: 1; padding: 0;
+}
+.ctx-badge button:hover { color: var(--danger); }
+
+/* @-mention autocomplete */
+.at-dropdown {
+  position: absolute; bottom: 100%; left: 0; right: 0; max-height: 200px;
+  overflow-y: auto; background: var(--bg-sidebar); border: 1px solid var(--border);
+  border-radius: 6px; margin-bottom: 4px; z-index: 50; display: none;
+}
+.at-dropdown.open { display: block; }
+.at-item {
+  padding: 6px 12px; cursor: pointer; font-size: 12px;
+  font-family: monospace; color: var(--text-primary);
+}
+.at-item:hover, .at-item.active { background: var(--bg-message-ai); }
+.at-item .at-path { color: var(--text-secondary); margin-left: 4px; }
+
+/* File viewer modal */
+.file-viewer-content {
+  background: #1e1e1e; border-radius: 6px; padding: 12px; overflow: auto;
+  max-height: 60vh; font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px; line-height: 1.5; white-space: pre; color: #d4d4d4;
+  tab-size: 4;
+}
+.file-viewer-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+}
+.file-viewer-path { font-family: monospace; font-size: 13px; color: var(--accent); }
+.file-viewer-size { font-size: 11px; color: var(--text-secondary); }
+
+/* Workspace modal tabs */
+.ws-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.ws-tab {
+  padding: 8px 16px; background: none; border: none; color: var(--text-secondary);
+  cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent;
+}
+.ws-tab:hover { color: var(--text-primary); }
+.ws-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.ws-tab-content { display: none; }
+.ws-tab-content.active { display: block; }
+
+.ws-upload-area {
+  border: 2px dashed var(--border); border-radius: 8px; padding: 24px;
+  text-align: center; color: var(--text-secondary); cursor: pointer;
+}
+.ws-upload-area:hover { border-color: var(--accent); color: var(--text-primary); }
+.ws-upload-progress {
+  margin-top: 8px; font-size: 12px; color: var(--text-secondary);
+}
+.ws-list-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+.ws-list-table th {
+  text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border);
+  color: var(--text-secondary); font-weight: normal;
+}
+.ws-list-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.ws-list-table .ws-del-btn {
+  background: none; border: 1px solid var(--danger); color: var(--danger);
+  border-radius: 4px; font-size: 11px; padding: 2px 8px; cursor: pointer;
+}
+.ws-list-table .ws-del-btn:hover { background: var(--danger); color: white; }
+
+/* Mobile */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .message-inner { padding: 0 16px; }
+  .modal { width: 100%; max-width: 100%; border-radius: 0; max-height: 100vh; }
+}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="sidebar-header">
+    <h2>Local AI Chat</h2>
+    <div class="subtitle">Ollama + Stable Diffusion</div>
+  </div>
+  <button class="new-chat-btn" onclick="newChat()">+ New Chat</button>
+  <div class="chat-list" id="chat-list"></div>
+  <div class="ws-section" id="workspace-section">
+    <div class="ws-header">
+      <span>Workspace</span>
+      <button class="ws-add-btn" onclick="openWorkspaceModal()">+ Add</button>
+    </div>
+    <select class="ws-select" id="workspace-select" onchange="switchWorkspace(this.value)">
+      <option value="">None (regular chat)</option>
+    </select>
+    <div class="file-tree" id="file-tree" style="display:none;"></div>
+  </div>
+  <select class="model-select" id="model-select" style="display:none;"></select>
+  <div class="resource-info" id="resource-info">Detecting resources...</div>
+  <div style="padding: 8px; border-top: 1px solid var(--border);">
+    <a class="grafana-link" href="" id="grafana-link" target="_blank">System Monitor</a>
+    <a class="grafana-link" href="#" onclick="openStatus(); return false;">Task Status</a>
+    <a class="grafana-link" href="#" onclick="openModels(); return false;">Manage Models</a>
+  </div>
+</div>
+
+<div class="main">
+  <div class="toast" id="toast"></div>
+  <div class="ws-bar" id="workspace-bar" style="display:none;">
+    <div class="ws-bar-info">
+      <span class="ws-bar-name" id="ws-bar-name"></span>
+      <span class="ws-bar-count" id="ws-bar-count"></span>
+      <span class="ws-bar-tokens" id="ws-bar-tokens"></span>
+    </div>
+    <button class="ws-bar-close" onclick="deactivateWorkspace()">Close Workspace</button>
+  </div>
+  <div class="messages" id="messages">
+    <div class="welcome" id="welcome">
+      <h1>Local AI Chat</h1>
+      <p>Chat naturally, ask for images, or compose music. Just say "draw me a cat" or "compose a waltz in the style of Chopin" and it'll know what to do.</p>
+      <div class="hint-cards">
+        <div class="hint-card" onclick="useHint('Explain how neural networks learn')">Explain how neural networks learn</div>
+        <div class="hint-card" onclick="useHint('Draw a serene mountain landscape at sunset')">Draw a mountain landscape</div>
+        <div class="hint-card" onclick="useHint('Compose a fugue in the style of JS Bach')">Compose a Bach-style fugue</div>
+        <div class="hint-card" onclick="useHint('Paint a cyberpunk city at night with neon lights')">Paint a cyberpunk city</div>
+      </div>
+    </div>
+  </div>
+  <div class="input-area">
+    <div class="input-wrap">
+      <div class="params-panel" id="params-panel">
+        <div class="params-tabs">
+          <button class="params-tab active" onclick="switchParamsTab('chat')">Chat</button>
+          <button class="params-tab" onclick="switchParamsTab('image')">Image</button>
+          <button class="params-tab" onclick="switchParamsTab('models')">Model Routing</button>
+        </div>
+        <div class="params-body">
+          <div class="params-section active" id="params-chat">
+            <div class="param-grid">
+              <div class="param-group" title="Controls randomness. Lower = more precise/deterministic. Higher = more creative/varied.">
+                <label class="param-label">Temperature <span class="param-val" id="pv-temp">0.8</span></label>
+                <input type="range" id="p-temperature" min="0" max="2" step="0.1" value="0.8" oninput="document.getElementById('pv-temp').textContent=this.value">
+                <div class="param-hint">Code analysis: 0.1-0.3 | Creative: 0.7-1.0</div>
+              </div>
+              <div class="param-group" title="Cumulative probability cutoff. Lower = more focused on likely words.">
+                <label class="param-label">Top P <span class="param-val" id="pv-topp">0.9</span></label>
+                <input type="range" id="p-top_p" min="0" max="1" step="0.05" value="0.9" oninput="document.getElementById('pv-topp').textContent=this.value">
+                <div class="param-hint">Code: 0.5-0.7 | General: 0.9</div>
+              </div>
+              <div class="param-group" title="Number of top tokens to consider. Lower = more focused.">
+                <label class="param-label">Top K <span class="param-val" id="pv-topk">40</span></label>
+                <input type="range" id="p-top_k" min="1" max="100" step="1" value="40" oninput="document.getElementById('pv-topk').textContent=this.value">
+                <div class="param-hint">Code: 10-20 | General: 40</div>
+              </div>
+              <div class="param-group" title="Penalizes repeated text. Higher = less repetition.">
+                <label class="param-label">Repeat Penalty <span class="param-val" id="pv-rep">1.1</span></label>
+                <input type="range" id="p-repeat_penalty" min="0.5" max="2" step="0.1" value="1.1" oninput="document.getElementById('pv-rep').textContent=this.value">
+                <div class="param-hint">Default 1.1 works for most cases</div>
+              </div>
+              <div class="param-group" title="How much text the model can see at once. More = slower on CPU. Critical for code analysis.">
+                <label class="param-label">Context Length</label>
+                <select id="p-num_ctx">
+                  <option value="">Model Default</option>
+                  <option value="512">512</option>
+                  <option value="1024">1024</option>
+                  <option value="2048">2048</option>
+                  <option value="4096">4096</option>
+                  <option value="8192">8192</option>
+                  <option value="16384">16384</option>
+                  <option value="32768">32768</option>
+                </select>
+                <div class="param-hint">Code: 4096+ (slower) | Chat: 2048 (faster)</div>
+              </div>
+              <div class="param-group" title="Maximum response length. -1 = unlimited.">
+                <label class="param-label">Max Tokens</label>
+                <input type="number" id="p-num_predict" value="-1" min="-1" max="4096" placeholder="-1 = unlimited">
+                <div class="param-hint">Limit to 256-512 for faster responses</div>
+              </div>
+              <div class="param-group" title="Fixed random seed for reproducible outputs.">
+                <label class="param-label">Seed</label>
+                <input type="number" id="p-chat-seed" value="0" min="0" placeholder="0 = random">
+              </div>
+            </div>
+            <div style="display:flex; gap:6px; margin-top:4px;">
+              <button class="params-reset" onclick="resetChatParams(); syncAllToModal();">Defaults</button>
+              <button class="params-reset" onclick="setCodePreset(); syncAllToModal();" title="Low temperature, focused sampling, 4096 context - optimized for code analysis">Code Preset</button>
+            </div>
+            <div id="chat-model-info" style="font-size:10px; color:var(--text-secondary); margin-top:6px;"></div>
+          </div>
+          <div class="params-section" id="params-image">
+            <div class="param-grid">
+              <div class="param-group">
+                <label class="param-label">Steps <span class="param-val" id="pv-steps">15</span></label>
+                <input type="range" id="p-steps" min="1" max="50" step="1" value="15" oninput="document.getElementById('pv-steps').textContent=this.value">
+              </div>
+              <div class="param-group">
+                <label class="param-label">CFG Scale <span class="param-val" id="pv-cfg">7</span></label>
+                <input type="range" id="p-cfg_scale" min="1" max="30" step="0.5" value="7" oninput="document.getElementById('pv-cfg').textContent=this.value">
+              </div>
+              <div class="param-group">
+                <label class="param-label">Width</label>
+                <select id="p-width">
+                  <option value="">Auto (tuned)</option>
+                  <option value="256">256</option>
+                  <option value="384">384</option>
+                  <option value="512">512</option>
+                  <option value="640">640</option>
+                  <option value="768">768</option>
+                </select>
+              </div>
+              <div class="param-group">
+                <label class="param-label">Height</label>
+                <select id="p-height">
+                  <option value="">Auto (tuned)</option>
+                  <option value="256">256</option>
+                  <option value="384">384</option>
+                  <option value="512">512</option>
+                  <option value="640">640</option>
+                  <option value="768">768</option>
+                </select>
+              </div>
+              <div class="param-group">
+                <label class="param-label">Sampler</label>
+                <select id="p-sampler"></select>
+              </div>
+              <div class="param-group">
+                <label class="param-label">Seed</label>
+                <input type="number" id="p-img-seed" value="-1" min="-1" placeholder="-1 = random">
+              </div>
+              <div class="param-group wide">
+                <label class="param-label">Negative Prompt</label>
+                <textarea id="p-negative" rows="2" placeholder="blurry, low quality, distorted">blurry, low quality, distorted</textarea>
+              </div>
+            </div>
+            <button class="params-reset" onclick="resetImageParams(); syncAllToModal();">Reset to Defaults</button>
+          </div>
+          <div class="params-section" id="params-models">
+            <p style="font-size:12px; color:var(--text-secondary); margin-bottom:12px;">
+              Assign different Ollama models to each task type. Smaller models are faster for structured output like music notation.
+            </p>
+            <div class="param-grid">
+              <div class="param-group">
+                <label class="param-label">Chat Model</label>
+                <select id="p-model-chat" onchange="saveModelRouting()"></select>
+              </div>
+              <div class="param-group">
+                <label class="param-label">Music Model</label>
+                <select id="p-model-music" onchange="saveModelRouting()"></select>
+              </div>
+            </div>
+            <p style="font-size:11px; color:var(--text-secondary); margin-top:8px;">
+              The sidebar dropdown changes the <strong>chat</strong> model. Music uses its own model assignment.
+              Smaller models (3-4B params) generate LilyPond notation faster on CPU.
+            </p>
+            <button class="params-reset" onclick="resetModelRouting()">Reset to Defaults</button>
+          </div>
+        </div>
+      </div>
+      <div class="ctx-badges" id="context-badges" style="display:none;"></div>
+      <div class="input-row" style="position:relative;">
+        <div class="at-dropdown" id="at-dropdown"></div>
+        <textarea id="chat-input" rows="1" placeholder="Send a message or ask me to draw something..." autofocus></textarea>
+        <button class="params-toggle" onclick="toggleParams()" title="Parameters" style="padding:0 8px;">
+          <span class="gear">&#9881;</span>
+        </button>
+        <button class="send-btn" id="send-btn" onclick="send()">&#10148;</button>
+      </div>
+      <div class="input-hint">Press Enter to send, Shift+Enter for new line &middot; Click &#9881; to tweak model parameters</div>
+    </div>
+  </div>
+</div>
+
+<!-- Model Management Modal -->
+<div class="modal-overlay" id="model-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModels()">&times;</button>
+    <h2>Model Management</h2>
+
+    <h3>Ollama Models (Chat)</h3>
+    <table class="model-table">
+      <thead><tr><th>Model</th><th>Size</th><th>Params</th><th>Quant</th><th></th></tr></thead>
+      <tbody id="ollama-model-list"></tbody>
+    </table>
+    <h3>Browse Ollama Models</h3>
+    <div class="model-pull-row">
+      <input type="text" id="ollama-search-query" placeholder="Search models (e.g. code, llama, small...)">
+      <button id="ollama-search-btn" onclick="searchOllamaModels()">Search</button>
+    </div>
+    <div class="popular-models" style="margin-bottom:6px;">
+      <button onclick="searchOllamaQuick('')">All</button>
+      <button onclick="searchOllamaQuick('llama')">Llama</button>
+      <button onclick="searchOllamaQuick('code')">Code</button>
+      <button onclick="searchOllamaQuick('small')">Small</button>
+      <button onclick="searchOllamaQuick('vision')">Vision</button>
+      <button onclick="searchOllamaQuick('mistral')">Mistral</button>
+    </div>
+    <div id="ollama-search-results" style="max-height:200px; overflow-y:auto;"></div>
+    <h3 style="font-size:12px; margin-top:8px;">Or enter model name directly</h3>
+    <div class="model-pull-row">
+      <input type="text" id="ollama-pull-name" placeholder="Model name (e.g. llama3.2:3b)">
+      <button id="ollama-pull-btn" onclick="pullOllamaModel()">Pull</button>
+    </div>
+    <div class="model-progress" id="ollama-pull-progress"></div>
+
+    <h3>Ollama Parameters</h3>
+    <div class="param-grid">
+      <div class="param-group">
+        <label class="param-label">Temperature <span class="param-val" id="mv-temp">0.8</span></label>
+        <input type="range" id="m-temperature" min="0" max="2" step="0.1" value="0.8" oninput="syncParam(this,'p-temperature','pv-temp')">
+      </div>
+      <div class="param-group">
+        <label class="param-label">Top P <span class="param-val" id="mv-topp">0.9</span></label>
+        <input type="range" id="m-top_p" min="0" max="1" step="0.05" value="0.9" oninput="syncParam(this,'p-top_p','pv-topp')">
+      </div>
+      <div class="param-group">
+        <label class="param-label">Top K <span class="param-val" id="mv-topk">40</span></label>
+        <input type="range" id="m-top_k" min="1" max="100" step="1" value="40" oninput="syncParam(this,'p-top_k','pv-topk')">
+      </div>
+      <div class="param-group">
+        <label class="param-label">Repeat Penalty <span class="param-val" id="mv-rep">1.1</span></label>
+        <input type="range" id="m-repeat_penalty" min="0.5" max="2" step="0.1" value="1.1" oninput="syncParam(this,'p-repeat_penalty','pv-rep')">
+      </div>
+      <div class="param-group">
+        <label class="param-label">Context Length</label>
+        <select id="m-num_ctx" onchange="syncSelect(this,'p-num_ctx')">
+          <option value="">Model Default</option>
+          <option value="512">512</option>
+          <option value="1024">1024</option>
+          <option value="2048">2048</option>
+          <option value="4096">4096</option>
+          <option value="8192">8192</option>
+          <option value="16384">16384</option>
+          <option value="32768">32768</option>
+        </select>
+      </div>
+      <div class="param-group">
+        <label class="param-label">Max Tokens</label>
+        <input type="number" id="m-num_predict" value="-1" min="-1" max="4096" placeholder="-1 = unlimited" onchange="syncInput(this,'p-num_predict')">
+      </div>
+      <div class="param-group">
+        <label class="param-label">Seed</label>
+        <input type="number" id="m-chat-seed" value="0" min="0" placeholder="0 = random" onchange="syncInput(this,'p-chat-seed')">
+      </div>
+    </div>
+    <button class="params-reset" onclick="resetChatParams(); syncAllToModal();">Reset to Defaults</button>
+
+    <h3>Stable Diffusion Models (Image) - Installed</h3>
+    <table class="model-table">
+      <thead><tr><th>Model</th><th>Hash</th><th></th></tr></thead>
+      <tbody id="sd-model-list"></tbody>
+    </table>
+
+    <h3>Browse Models from HuggingFace</h3>
+    <div class="model-pull-row">
+      <input type="text" id="sd-search-query" placeholder="Search (e.g. dreamshaper, realistic, anime...)" value="stable diffusion checkpoint">
+      <button id="sd-search-btn" onclick="searchSDModels()">Search</button>
+    </div>
+    <div class="popular-models" style="margin-bottom:8px;">
+      <button onclick="searchSDQuick('stable diffusion 1.5')">SD 1.5</button>
+      <button onclick="searchSDQuick('dreamshaper')">DreamShaper</button>
+      <button onclick="searchSDQuick('realistic vision')">Realistic</button>
+      <button onclick="searchSDQuick('anime diffusion')">Anime</button>
+      <button onclick="searchSDQuick('openjourney')">OpenJourney</button>
+      <button onclick="searchSDQuick('deliberate')">Deliberate</button>
+      <button onclick="searchSDQuick('epic realism')">epiCRealism</button>
+      <button onclick="searchSDQuick('analog diffusion')">Analog</button>
+    </div>
+    <div id="sd-search-results" style="max-height:250px; overflow-y:auto;"></div>
+
+    <h3 style="font-size:12px; margin-top:12px;">Or paste a direct URL</h3>
+    <div class="model-pull-row">
+      <input type="text" id="sd-download-url" placeholder="https://huggingface.co/.../model.safetensors">
+      <button id="sd-download-btn" onclick="downloadSDModel()">Download</button>
+    </div>
+    <div class="model-progress" id="sd-download-progress"></div>
+
+    <h3>SD Parameters</h3>
+    <div class="param-grid">
+      <div class="param-group">
+        <label class="param-label">Steps <span class="param-val" id="mv-steps">15</span></label>
+        <input type="range" id="m-steps" min="1" max="50" step="1" value="15" oninput="syncParam(this,'p-steps','pv-steps')">
+      </div>
+      <div class="param-group">
+        <label class="param-label">CFG Scale <span class="param-val" id="mv-cfg">7</span></label>
+        <input type="range" id="m-cfg_scale" min="1" max="30" step="0.5" value="7" oninput="syncParam(this,'p-cfg_scale','pv-cfg')">
+      </div>
+      <div class="param-group">
+        <label class="param-label">Width</label>
+        <select id="m-width" onchange="syncSelect(this,'p-width')">
+          <option value="">Default</option>
+          <option value="256">256</option>
+          <option value="384">384</option>
+          <option value="512">512</option>
+          <option value="768">768</option>
+        </select>
+      </div>
+      <div class="param-group">
+        <label class="param-label">Height</label>
+        <select id="m-height" onchange="syncSelect(this,'p-height')">
+          <option value="">Default</option>
+          <option value="256">256</option>
+          <option value="384">384</option>
+          <option value="512">512</option>
+          <option value="768">768</option>
+        </select>
+      </div>
+      <div class="param-group">
+        <label class="param-label">Sampler</label>
+        <select id="m-sampler" onchange="syncSelect(this,'p-sampler')">
+          <option value="">Default</option>
+        </select>
+      </div>
+      <div class="param-group">
+        <label class="param-label">Seed</label>
+        <input type="number" id="m-img-seed" value="-1" min="-1" placeholder="-1 = random" onchange="syncInput(this,'p-img-seed')">
+      </div>
+    </div>
+    <button class="params-reset" onclick="resetImageParams(); syncAllToModal();">Reset to Defaults</button>
+
+    <h3 style="margin-top:12px;">SD Auto-Tune</h3>
+    <p style="font-size:11px; color:var(--text-secondary); margin-bottom:8px;">
+      Benchmark samplers, steps, resolutions, and thread counts to find optimal settings for this hardware.
+    </p>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <button class="primary" id="tune-btn" onclick="startTune()">Auto-Tune SD</button>
+      <button class="danger" id="reset-tune-btn" onclick="resetTune()" style="display:none;">Reset to Defaults</button>
+    </div>
+    <div class="tune-status" id="tune-status" style="font-size:11px; color:var(--text-secondary); padding:4px 0;"></div>
+    <div class="tune-results" id="tune-results"></div>
+  </div>
+</div>
+
+<!-- Task Status Modal -->
+<div class="modal-overlay" id="status-modal">
+  <div class="modal modal-wide">
+    <button class="modal-close" onclick="closeStatus()">&times;</button>
+    <h2>Task Status</h2>
+    <div style="font-size:11px;color:var(--text-secondary);margin-bottom:12px;">
+      <label><input type="checkbox" id="status-auto-refresh" checked> Auto-refresh</label>
+      <span id="status-updated" style="margin-left:12px;"></span>
+    </div>
+    <div class="status-grid" id="status-grid">
+      <!-- Ollama -->
+      <div class="status-card">
+        <h3><span class="st-dot" id="st-ollama-dot"></span> Ollama (Chat)</h3>
+        <div id="st-ollama-info"></div>
+        <div id="st-ollama-task"></div>
+        <div class="st-btns">
+          <button class="st-btn-cancel" id="st-ollama-cancel" onclick="stCancelOllama()" disabled>Cancel Task</button>
+          <button class="st-btn-restart" onclick="stRestart('ollama')">Restart</button>
+        </div>
+      </div>
+      <!-- Stable Diffusion -->
+      <div class="status-card">
+        <h3><span class="st-dot" id="st-sd-dot"></span> Stable Diffusion (Images)</h3>
+        <div id="st-sd-info"></div>
+        <div id="st-sd-task"></div>
+        <div class="st-btns">
+          <button class="st-btn-cancel" id="st-sd-cancel" onclick="stCancelSD()" disabled>Cancel Task</button>
+          <button class="st-btn-warn" id="st-sd-clear-q" onclick="stClearQueue()" disabled>Clear Queue</button>
+          <button class="st-btn-restart" onclick="stRestart('sd')">Restart</button>
+        </div>
+      </div>
+      <!-- Music -->
+      <div class="status-card">
+        <h3><span class="st-dot" id="st-music-dot"></span> Music Generation</h3>
+        <div id="st-music-info">
+          <div class="st-row"><span class="st-label">Pipeline</span><span class="st-value">Ollama &rarr; LilyPond &rarr; MP3</span></div>
+        </div>
+        <div id="st-music-task"></div>
+        <div class="st-btns">
+          <button class="st-btn-cancel" id="st-music-cancel" onclick="stCancelMusic()" disabled>Cancel Task</button>
+        </div>
+      </div>
+      <!-- Unified Chat -->
+      <div class="status-card">
+        <h3><span class="st-dot running"></span> Unified Chat</h3>
+        <div class="st-row"><span class="st-label">Status</span><span class="st-value">Running</span></div>
+        <div class="st-row"><span class="st-label">Port</span><span class="st-value">443 (HTTPS)</span></div>
+        <div class="st-btns">
+          <button class="st-btn-restart" onclick="stRestart('unified-chat')">Restart</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Workspace Management Modal -->
+<div class="modal-overlay" id="ws-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeWorkspaceModal()">&times;</button>
+    <h2>Code Workspaces</h2>
+    <div class="ws-tabs">
+      <button class="ws-tab active" onclick="switchWsTab('upload',this)">Upload Directory</button>
+      <button class="ws-tab" onclick="switchWsTab('clone',this)">Clone from Git</button>
+      <button class="ws-tab" onclick="switchWsTab('manage',this)">Manage</button>
+    </div>
+    <div class="ws-tab-content active" id="ws-tab-upload">
+      <div class="ws-upload-area" id="ws-upload-area" onclick="document.getElementById('ws-file-input').click()">
+        <p style="font-size:14px; margin-bottom:4px;">Click to select a project folder</p>
+        <p style="font-size:11px;">Or drag and drop a folder here</p>
+      </div>
+      <input type="file" id="ws-file-input" webkitdirectory directory multiple style="display:none;" onchange="handleWsUpload(this)">
+      <div class="ws-upload-progress" id="ws-upload-progress"></div>
+    </div>
+    <div class="ws-tab-content" id="ws-tab-clone">
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px; color:var(--text-secondary); display:block; margin-bottom:4px;">Repository URL (HTTPS)</label>
+        <input type="text" id="ws-clone-url" placeholder="https://github.com/user/repo.git" style="width:100%; padding:6px 10px; background:var(--input-bg); color:var(--text-primary); border:1px solid var(--border); border-radius:4px; font-size:13px;">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px; color:var(--text-secondary); display:block; margin-bottom:4px;">Name (optional)</label>
+        <input type="text" id="ws-clone-name" placeholder="Auto-detected from URL" style="width:100%; padding:6px 10px; background:var(--input-bg); color:var(--text-primary); border:1px solid var(--border); border-radius:4px; font-size:13px;">
+      </div>
+      <button class="primary" onclick="cloneWorkspace()">Clone Repository</button>
+      <div class="ws-upload-progress" id="ws-clone-progress"></div>
+    </div>
+    <div class="ws-tab-content" id="ws-tab-manage">
+      <table class="ws-list-table" id="ws-list-table">
+        <thead><tr><th>Name</th><th>Files</th><th>Size</th><th></th></tr></thead>
+        <tbody id="ws-list-body"></tbody>
+      </table>
+      <div id="ws-list-empty" style="color:var(--text-secondary); font-size:12px; padding:12px;">No workspaces yet. Upload a directory or clone a repo to get started.</div>
+    </div>
+  </div>
+</div>
+
+<!-- File Viewer Modal -->
+<div class="modal-overlay" id="file-viewer-modal">
+  <div class="modal" style="max-width:800px;">
+    <button class="modal-close" onclick="closeFileViewer()">&times;</button>
+    <div class="file-viewer-header">
+      <span class="file-viewer-path" id="fv-path"></span>
+      <span class="file-viewer-size" id="fv-size"></span>
+    </div>
+    <div class="file-viewer-content" id="fv-content"></div>
+  </div>
+</div>
+
+<script>
+const messagesEl = document.getElementById('messages');
+const inputEl = document.getElementById('chat-input');
+const sendBtn = document.getElementById('send-btn');
+const modelSelect = document.getElementById('model-select');
+const chatListEl = document.getElementById('chat-list');
+const welcomeEl = document.getElementById('welcome');
+const resourceEl = document.getElementById('resource-info');
+
+let conversations = {};
+let currentChatId = null;
+let isChatting = false;
+let isDrawing = false;
+let isComposing = false;
+let musicAbort = null;
+let promptHistoryIndex = -1;
+
+// Workspace state
+let activeWorkspace = null;  // {name, tree, files[]}
+let pinnedFiles = [];
+let atDropdownIndex = -1;
+
+// Auto-resize textarea
+inputEl.addEventListener('input', () => {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
+});
+
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    send();
+    return;
+  }
+
+  // Up/Down arrow to cycle through previous prompts (only when input is empty or already browsing history)
+  if (e.key === 'ArrowUp' && !e.shiftKey) {
+    const chat = conversations[currentChatId];
+    if (!chat) return;
+    const userMsgs = chat.messages.filter(m => m.role === 'user');
+    if (userMsgs.length === 0) return;
+    // Only activate on first up press when cursor is at start or input is empty
+    if (promptHistoryIndex === -1 && inputEl.value && inputEl.selectionStart !== 0) return;
+    e.preventDefault();
+    if (promptHistoryIndex === -1) promptHistoryIndex = userMsgs.length;
+    if (promptHistoryIndex > 0) {
+      promptHistoryIndex--;
+      inputEl.value = userMsgs[promptHistoryIndex].content;
+      inputEl.style.height = 'auto';
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
+      // Move cursor to end
+      setTimeout(() => inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length), 0);
+    }
+    return;
+  }
+
+  if (e.key === 'ArrowDown' && !e.shiftKey && promptHistoryIndex !== -1) {
+    const chat = conversations[currentChatId];
+    if (!chat) return;
+    const userMsgs = chat.messages.filter(m => m.role === 'user');
+    e.preventDefault();
+    promptHistoryIndex++;
+    if (promptHistoryIndex >= userMsgs.length) {
+      promptHistoryIndex = -1;
+      inputEl.value = '';
+    } else {
+      inputEl.value = userMsgs[promptHistoryIndex].content;
+    }
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
+    return;
+  }
+});
+
+// ── Workspace management ────────────────────────────────────────────────
+
+function openWorkspaceModal() {
+  document.getElementById('ws-modal').classList.add('open');
+  loadWorkspaceList();
+}
+function closeWorkspaceModal() {
+  document.getElementById('ws-modal').classList.remove('open');
+}
+
+function switchWsTab(tab, btn) {
+  document.querySelectorAll('#ws-modal .ws-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#ws-modal .ws-tab-content').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('ws-tab-' + tab).classList.add('active');
+  if (tab === 'manage') loadWorkspaceList();
+}
+
+async function loadWorkspaces() {
+  try {
+    const r = await fetch('/api/workspaces');
+    const data = await r.json();
+    const select = document.getElementById('workspace-select');
+    const current = select.value;
+    select.innerHTML = '<option value="">None (regular chat)</option>';
+    for (const ws of data.workspaces) {
+      const opt = document.createElement('option');
+      opt.value = ws.name;
+      opt.textContent = `${ws.name} (${ws.file_count} files)`;
+      select.appendChild(opt);
+    }
+    select.value = current;
+  } catch (e) {
+    console.error('Failed to load workspaces:', e);
+  }
+}
+
+async function loadWorkspaceList() {
+  try {
+    const r = await fetch('/api/workspaces');
+    const data = await r.json();
+    const body = document.getElementById('ws-list-body');
+    const empty = document.getElementById('ws-list-empty');
+    body.innerHTML = '';
+    if (data.workspaces.length === 0) {
+      empty.style.display = '';
+      return;
+    }
+    empty.style.display = 'none';
+    for (const ws of data.workspaces) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${ws.name}</td><td>${ws.file_count}</td><td>${ws.size_mb} MB</td>` +
+        `<td><button class="ws-del-btn" onclick="deleteWorkspace('${ws.name}')">Delete</button></td>`;
+      body.appendChild(tr);
+    }
+  } catch (e) {}
+}
+
+async function switchWorkspace(name) {
+  if (!name) {
+    deactivateWorkspace();
+    return;
+  }
+  try {
+    const r = await fetch(`/api/workspace/${name}/tree`);
+    const data = await r.json();
+    if (data.error) { alert(data.error); return; }
+    activeWorkspace = { name: data.name, tree: data.tree, files: data.files };
+    pinnedFiles = [];
+    renderFileTree(data.files);
+    document.getElementById('file-tree').style.display = '';
+    document.getElementById('workspace-bar').style.display = '';
+    document.getElementById('ws-bar-name').textContent = name;
+    document.getElementById('ws-bar-count').textContent = `${data.files.length} files`;
+    document.getElementById('ws-bar-tokens').textContent = '';
+    renderContextBadges();
+    inputEl.placeholder = 'Ask about the code, use @filename to reference files...';
+    // Auto-apply code preset for better code analysis
+    setCodePreset();
+    syncAllToModal();
+  } catch (e) {
+    console.error('Failed to load workspace:', e);
+  }
+}
+
+function deactivateWorkspace() {
+  activeWorkspace = null;
+  pinnedFiles = [];
+  document.getElementById('workspace-select').value = '';
+  document.getElementById('file-tree').style.display = 'none';
+  document.getElementById('workspace-bar').style.display = 'none';
+  document.getElementById('context-badges').style.display = 'none';
+  inputEl.placeholder = 'Send a message or ask me to draw something...';
+  // Restore default params when leaving code mode
+  resetChatParams();
+  syncAllToModal();
+}
+
+function renderFileTree(files) {
+  const treeEl = document.getElementById('file-tree');
+  treeEl.innerHTML = '';
+
+  // Build nested structure
+  const root = {};
+  for (const f of files) {
+    const parts = f.path.split('/');
+    let node = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!node[parts[i]]) node[parts[i]] = {};
+      node[parts[i]] = node[parts[i]];
+      if (!node[parts[i]].__children) node[parts[i]].__children = {};
+      node = node[parts[i]].__children;
+    }
+    node[parts[parts.length - 1]] = f;
+  }
+
+  function renderNode(obj, depth) {
+    const keys = Object.keys(obj).filter(k => k !== '__children').sort((a, b) => {
+      const aIsDir = obj[a] && obj[a].__children;
+      const bIsDir = obj[b] && obj[b].__children;
+      if (aIsDir && !bIsDir) return -1;
+      if (!aIsDir && bIsDir) return 1;
+      return a.localeCompare(b);
+    });
+    for (const key of keys) {
+      const val = obj[key];
+      const isDir = val && val.__children;
+      const div = document.createElement('div');
+      div.className = 'ft-item' + (isDir ? ' ft-dir' : '');
+      div.style.paddingLeft = (8 + depth * 16) + 'px';
+      if (isDir) {
+        div.innerHTML = `<span class="ft-icon">\u{1F4C1}</span><span class="ft-name">${key}/</span>`;
+        treeEl.appendChild(div);
+        renderNode(val.__children, depth + 1);
+      } else {
+        const path = val.path;
+        div.innerHTML = `<span class="ft-icon">\u{1F4C4}</span><span class="ft-name">${key}</span>` +
+          `<button class="ft-pin" onclick="event.stopPropagation();pinFile('${path}')" title="Add to context">+</button>`;
+        div.onclick = () => viewFile(path);
+        treeEl.appendChild(div);
+      }
+    }
+  }
+  renderNode(root, 0);
+}
+
+function pinFile(path) {
+  if (!pinnedFiles.includes(path)) {
+    pinnedFiles.push(path);
+    renderContextBadges();
+  }
+}
+
+function unpinFile(path) {
+  pinnedFiles = pinnedFiles.filter(p => p !== path);
+  renderContextBadges();
+}
+
+function renderContextBadges() {
+  const el = document.getElementById('context-badges');
+  if (!pinnedFiles.length) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = '';
+  el.innerHTML = pinnedFiles.map(p =>
+    `<span class="ctx-badge">@${p.split('/').pop()}<button onclick="unpinFile('${p}')">&times;</button></span>`
+  ).join('');
+}
+
+async function viewFile(path) {
+  if (!activeWorkspace) return;
+  try {
+    const r = await fetch(`/api/workspace/${activeWorkspace.name}/file?path=${encodeURIComponent(path)}`);
+    const data = await r.json();
+    if (data.error) { alert(data.error); return; }
+    document.getElementById('fv-path').textContent = path;
+    document.getElementById('fv-size').textContent = data.size > 1024 ? `${(data.size / 1024).toFixed(1)} KB` : `${data.size} B`;
+    const escaped = data.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    document.getElementById('fv-content').innerHTML = escaped;
+    document.getElementById('file-viewer-modal').classList.add('open');
+  } catch (e) {
+    console.error('Failed to read file:', e);
+  }
+}
+
+function closeFileViewer() {
+  document.getElementById('file-viewer-modal').classList.remove('open');
+}
+
+function setupDragDrop() {
+  const area = document.getElementById('ws-upload-area');
+  area.addEventListener('dragover', (e) => { e.preventDefault(); area.style.borderColor = 'var(--accent)'; });
+  area.addEventListener('dragleave', () => { area.style.borderColor = ''; });
+  area.addEventListener('drop', (e) => {
+    e.preventDefault();
+    area.style.borderColor = '';
+    const input = document.getElementById('ws-file-input');
+    if (e.dataTransfer.files.length) {
+      input.files = e.dataTransfer.files;
+      handleWsUpload(input);
+    }
+  });
+}
+
+async function handleWsUpload(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  const progressEl = document.getElementById('ws-upload-progress');
+  progressEl.textContent = `Uploading ${files.length} files...`;
+
+  const formData = new FormData();
+  for (const f of files) {
+    formData.append('files', f, f.webkitRelativePath || f.name);
+  }
+
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/workspace/upload');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round(e.loaded / e.total * 100);
+        progressEl.textContent = `Uploading... ${pct}%`;
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        const data = JSON.parse(xhr.responseText);
+        progressEl.textContent = `Uploaded: ${data.name} (${data.file_count} files)`;
+        loadWorkspaces();
+        loadWorkspaceList();
+        // Auto-select the workspace
+        setTimeout(() => {
+          document.getElementById('workspace-select').value = data.name;
+          switchWorkspace(data.name);
+        }, 300);
+      } else {
+        progressEl.textContent = 'Upload failed: ' + xhr.responseText;
+      }
+    };
+    xhr.onerror = () => { progressEl.textContent = 'Upload failed'; };
+    xhr.send(formData);
+  } catch (e) {
+    progressEl.textContent = 'Upload error: ' + e.message;
+  }
+  input.value = '';
+}
+
+async function cloneWorkspace() {
+  const url = document.getElementById('ws-clone-url').value.trim();
+  const name = document.getElementById('ws-clone-name').value.trim();
+  if (!url) { alert('Please enter a repository URL'); return; }
+
+  const progressEl = document.getElementById('ws-clone-progress');
+  progressEl.textContent = 'Starting clone...';
+
+  try {
+    const r = await fetch('/api/workspace/clone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, name }),
+    });
+    const data = await r.json();
+    if (data.error) { progressEl.textContent = data.error; return; }
+
+    // Poll progress
+    const poll = setInterval(async () => {
+      try {
+        const pr = await fetch('/api/workspace/clone/progress');
+        const pd = await pr.json();
+        progressEl.textContent = pd.progress;
+        if (!pd.active) {
+          clearInterval(poll);
+          if (pd.progress === 'Complete') {
+            loadWorkspaces();
+            loadWorkspaceList();
+            setTimeout(() => {
+              document.getElementById('workspace-select').value = pd.name;
+              switchWorkspace(pd.name);
+            }, 300);
+          }
+        }
+      } catch (e) { clearInterval(poll); }
+    }, 1000);
+  } catch (e) {
+    progressEl.textContent = 'Clone error: ' + e.message;
+  }
+}
+
+async function deleteWorkspace(name) {
+  if (!confirm(`Delete workspace "${name}"? This cannot be undone.`)) return;
+  try {
+    await fetch(`/api/workspace/${name}`, { method: 'DELETE' });
+    if (activeWorkspace && activeWorkspace.name === name) deactivateWorkspace();
+    loadWorkspaces();
+    loadWorkspaceList();
+  } catch (e) {}
+}
+
+// ── @-mention autocomplete ──────────────────────────────────────────────
+
+function setupAtMention() {
+  const dropdown = document.getElementById('at-dropdown');
+
+  inputEl.addEventListener('input', () => {
+    if (!activeWorkspace) { dropdown.classList.remove('open'); return; }
+
+    const val = inputEl.value;
+    const cursor = inputEl.selectionStart;
+    // Find @ before cursor
+    const before = val.substring(0, cursor);
+    const atMatch = before.match(/@([\w./\\-]*)$/);
+    if (!atMatch) { dropdown.classList.remove('open'); atDropdownIndex = -1; return; }
+
+    const partial = atMatch[1].toLowerCase();
+    const matches = activeWorkspace.files.filter(f => {
+      const basename = f.path.split('/').pop().toLowerCase();
+      const pathLower = f.path.toLowerCase();
+      return basename.startsWith(partial) || pathLower.includes(partial);
+    }).slice(0, 8);
+
+    if (!matches.length) { dropdown.classList.remove('open'); atDropdownIndex = -1; return; }
+
+    dropdown.innerHTML = matches.map((f, i) => {
+      const basename = f.path.split('/').pop();
+      const dir = f.path.includes('/') ? f.path.substring(0, f.path.lastIndexOf('/')) : '';
+      return `<div class="at-item${i === atDropdownIndex ? ' active' : ''}" onmousedown="selectAtMention('${f.path}')">${basename}${dir ? `<span class="at-path">${dir}/</span>` : ''}</div>`;
+    }).join('');
+    dropdown.classList.add('open');
+  });
+
+  inputEl.addEventListener('keydown', (e) => {
+    const dropdown = document.getElementById('at-dropdown');
+    if (!dropdown.classList.contains('open')) return;
+    const items = dropdown.querySelectorAll('.at-item');
+    if (!items.length) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      atDropdownIndex = Math.min(atDropdownIndex + 1, items.length - 1);
+      items.forEach((it, i) => it.classList.toggle('active', i === atDropdownIndex));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      atDropdownIndex = Math.max(atDropdownIndex - 1, 0);
+      items.forEach((it, i) => it.classList.toggle('active', i === atDropdownIndex));
+    } else if (e.key === 'Tab' || e.key === 'Enter') {
+      if (atDropdownIndex >= 0 && atDropdownIndex < items.length) {
+        e.preventDefault();
+        const path = activeWorkspace.files.filter(f => {
+          const val = inputEl.value;
+          const cursor = inputEl.selectionStart;
+          const before = val.substring(0, cursor);
+          const atMatch = before.match(/@([\w./\\-]*)$/);
+          if (!atMatch) return false;
+          const partial = atMatch[1].toLowerCase();
+          const basename = f.path.split('/').pop().toLowerCase();
+          return basename.startsWith(partial) || f.path.toLowerCase().includes(partial);
+        })[atDropdownIndex];
+        if (path) selectAtMention(path.path);
+      }
+    } else if (e.key === 'Escape') {
+      dropdown.classList.remove('open');
+      atDropdownIndex = -1;
+    }
+  });
+
+  inputEl.addEventListener('blur', () => {
+    setTimeout(() => { dropdown.classList.remove('open'); atDropdownIndex = -1; }, 200);
+  });
+}
+
+function selectAtMention(path) {
+  const val = inputEl.value;
+  const cursor = inputEl.selectionStart;
+  const before = val.substring(0, cursor);
+  const after = val.substring(cursor);
+  const atMatch = before.match(/@([\w./\\-]*)$/);
+  if (!atMatch) return;
+
+  const basename = path.split('/').pop();
+  const newBefore = before.substring(0, before.length - atMatch[0].length) + '@' + basename + ' ';
+  inputEl.value = newBefore + after;
+  inputEl.selectionStart = inputEl.selectionEnd = newBefore.length;
+  document.getElementById('at-dropdown').classList.remove('open');
+  atDropdownIndex = -1;
+
+  // Also pin the file
+  pinFile(path);
+  inputEl.focus();
+}
+
+async function init() {
+  // Set Grafana link to same host on port 3000
+  const grafanaHost = window.location.hostname;
+  document.getElementById('grafana-link').href = `http://${grafanaHost}:3000/d/121f9189-5d0d-45a8-a78f-9a3e0d5794c3/system-resources-llama?orgId=1&refresh=10s`;
+  // Redirect HTTP to HTTPS if not already secure
+  if (window.location.protocol === 'http:' && window.location.port !== '5005') {
+    window.location.href = window.location.href.replace('http:', 'https:');
+  }
+
+  try {
+    const [modelsRes, resourcesRes] = await Promise.all([
+      fetch('/api/models'),
+      fetch('/api/resources')
+    ]);
+    const modelsData = await modelsRes.json();
+    modelsData.models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m;
+      modelSelect.appendChild(opt);
+    });
+    const resData = await resourcesRes.json();
+    updateResourceDisplay(resData);
+  } catch (e) {
+    console.error('Init failed:', e);
+  }
+  loadSamplers();
+  loadWorkspaces();
+  setupAtMention();
+  setupDragDrop();
+  newChat();
+  setTimeout(loadModelDefaults, 500);
+}
+
+function updateResourceDisplay(resData) {
+  const r = resData.resources;
+  const p = resData.sd_params;
+  const ollamaModel = modelSelect.value || 'detecting...';
+  const sdModel = (resData.sd_model || '').split(' [')[0] || 'unavailable';
+  const tunedBadge = resData.is_tuned ? ' <span class="tuned-badge">TUNED</span>' : '';
+  resourceEl.innerHTML = `
+    <b>Ollama:</b> ${ollamaModel}<br>
+    <b>SD:</b> ${sdModel}${tunedBadge}<br>
+    <span style="color:var(--text-secondary);">CPU: ${r.cpu_count} cores &bull; RAM: ${r.ram_gb.toFixed(1)} GB &bull; ${r.has_gpu ? r.gpu_name : 'CPU mode'}</span>
+  `;
+  if (p.steps) { document.getElementById('p-steps').value = p.steps; document.getElementById('pv-steps').textContent = p.steps; }
+  if (p.cfg_scale) { document.getElementById('p-cfg_scale').value = p.cfg_scale; document.getElementById('pv-cfg').textContent = p.cfg_scale; }
+  if (p.width) document.getElementById('p-width').value = p.width;
+  if (p.height) document.getElementById('p-height').value = p.height;
+  if (p.sampler_name) document.getElementById('p-sampler').value = p.sampler_name;
+}
+
+async function refreshResourceInfo() {
+  try {
+    const res = await fetch('/api/resources');
+    updateResourceDisplay(await res.json());
+  } catch (e) {}
+}
+
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function newChat() {
+  const id = genId();
+  conversations[id] = { title: 'New Chat', messages: [] };
+  currentChatId = id;
+  renderChatList();
+  renderMessages();
+  inputEl.focus();
+}
+
+function switchChat(id) {
+  currentChatId = id;
+  renderChatList();
+  renderMessages();
+}
+
+function renderChatList() {
+  chatListEl.innerHTML = '';
+  Object.entries(conversations).reverse().forEach(([id, c]) => {
+    const el = document.createElement('div');
+    el.className = 'chat-list-item' + (id === currentChatId ? ' active' : '');
+    el.textContent = c.title;
+    el.onclick = () => switchChat(id);
+    chatListEl.appendChild(el);
+  });
+}
+
+function renderMessages() {
+  const msgs = conversations[currentChatId]?.messages || [];
+  if (msgs.length === 0) {
+    welcomeEl.style.display = 'flex';
+    messagesEl.innerHTML = '';
+    messagesEl.appendChild(welcomeEl);
+    return;
+  }
+  welcomeEl.style.display = 'none';
+  messagesEl.innerHTML = '';
+  msgs.forEach(m => {
+    messagesEl.appendChild(createMessageEl(m.role, m.content, m.isImage, m.genInfo, m.musicData));
+  });
+  scrollToBottom();
+}
+
+function createMessageEl(role, content, isImage, genInfo, musicData) {
+  const wrapper = document.createElement('div');
+  wrapper.className = `message ${role}`;
+  const inner = document.createElement('div');
+  inner.className = 'message-inner';
+
+  const avatar = document.createElement('div');
+  if (role === 'user') {
+    avatar.className = 'avatar user-avatar';
+    avatar.textContent = 'U';
+  } else {
+    const isMusicMsg = !!musicData;
+    avatar.className = isImage ? 'avatar img-avatar' : isMusicMsg ? 'avatar ai-avatar' : 'avatar ai-avatar';
+    avatar.textContent = isImage ? 'I' : isMusicMsg ? '\u266B' : 'AI';
+  }
+
+  const contentEl = document.createElement('div');
+  contentEl.className = 'message-content';
+  if (musicData) {
+    contentEl.innerHTML = renderMusicResult(musicData);
+  } else if (isImage) {
+    const img = document.createElement('img');
+    img.src = 'data:image/png;base64,' + content;
+    img.onclick = () => {
+      const w = window.open('');
+      w.document.write(`<img src="${img.src}" style="max-width:100%">`);
+    };
+    contentEl.appendChild(img);
+    if (genInfo) {
+      const info = document.createElement('div');
+      info.className = 'gen-info';
+      info.textContent = genInfo;
+      contentEl.appendChild(info);
+    }
+  } else {
+    contentEl.innerHTML = formatContent(content);
+  }
+
+  inner.appendChild(avatar);
+  inner.appendChild(contentEl);
+  wrapper.appendChild(inner);
+  return wrapper;
+}
+
+function formatContent(text) {
+  // Basic markdown: code blocks, inline code, bold, italic
+  let html = text
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Paragraphs
+  html = html.split('\n\n').map(p => `<p>${p}</p>`).join('');
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
+function scrollToBottom() {
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function useHint(text) {
+  inputEl.value = text;
+  inputEl.focus();
+  inputEl.dispatchEvent(new Event('input'));
+}
+
+// ── Routing correction & learning ──────────────────────────────────────────
+
+function detectCorrection(text) {
+  const lower = text.toLowerCase();
+  const phrases = [
+    'that was for chat', 'not an image', 'send to chat', 'meant for chat',
+    'wasn\'t an image', 'don\'t generate', 'not image generation',
+    'chat not image', 'intended for chat', 'was for the translation',
+    'was for chat', 'for the chat not', 'wrong routing', 'that\'s not an image',
+    'send that to chat', 'i meant chat', 'route to chat'
+  ];
+  return phrases.some(p => lower.includes(p));
+}
+
+function learnNotImage(message) {
+  const learned = JSON.parse(localStorage.getItem('notImagePhrases') || '[]');
+  const lower = message.toLowerCase().trim();
+  if (!learned.includes(lower)) {
+    learned.push(lower);
+    localStorage.setItem('notImagePhrases', JSON.stringify(learned));
+  }
+}
+
+function isLearnedNotImage(text) {
+  const learned = JSON.parse(localStorage.getItem('notImagePhrases') || '[]');
+  const lower = text.toLowerCase().trim();
+  // Check exact match or first-30-char prefix match
+  return learned.some(l => lower === l || (l.length >= 15 && lower.startsWith(l.substring(0, 30))));
+}
+
+// ── Workspace file feedback detection ────────────────────────────────────────
+
+function detectFileFeedback(text) {
+  if (!activeWorkspace) return null;
+
+  // :command filename — e.g. ":skip README.md", ":prioritize app.py"
+  const m = text.match(/^:(\w+)\s+(.+)$/);
+  if (!m) return null;
+
+  const cmd = m[1].toLowerCase();
+  const matched = matchWorkspaceFile(m[2].trim());
+  if (!matched) return null;
+
+  if (['skip', 'ignore', 'exclude', 'remove', 'drop', 'hide'].includes(cmd)) {
+    return { action: 'exclude', file: matched };
+  }
+  if (['prioritize', 'boost', 'pin', 'include', 'focus'].includes(cmd)) {
+    return { action: 'boost', file: matched };
+  }
+  if (['reset', 'clear', 'undo', 'default'].includes(cmd)) {
+    return { action: 'reset', file: matched };
+  }
+  return null;
+}
+
+function matchWorkspaceFile(ref) {
+  if (!activeWorkspace) return null;
+  const refLower = ref.toLowerCase().replace(/[@'"]/g, '').trim();
+  // Try exact path, basename, or partial match
+  for (const f of activeWorkspace.files) {
+    const pathLower = f.path.toLowerCase();
+    const basename = f.path.split('/').pop().toLowerCase();
+    if (basename === refLower || pathLower === refLower ||
+        pathLower.endsWith('/' + refLower)) {
+      return f.path;
+    }
+  }
+  // Fuzzy: check if ref is contained in any filename
+  for (const f of activeWorkspace.files) {
+    const basename = f.path.split('/').pop().toLowerCase();
+    if (basename.includes(refLower) && refLower.length >= 3) {
+      return f.path;
+    }
+  }
+  return null;
+}
+
+function showToast(msg, duration) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration || 3000);
+}
+
+async function sendFileFeedback(action, filePath) {
+  if (!activeWorkspace) return;
+  try {
+    await fetch(`/api/workspace/${activeWorkspace.name}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, file: filePath }),
+    });
+  } catch (e) {
+    console.error('Failed to save file feedback:', e);
+  }
+}
+
+// ── Music detection ──────────────────────────────────────────────────────────
+
+function detectMusicRequest(text) {
+  // Explicit /music command
+  if (text.startsWith('/music ')) return text.slice(7);
+
+  const lower = text.toLowerCase();
+
+  // Music nouns
+  const musicNouns = [
+    'song', 'melody', 'tune', 'fugue', 'sonata', 'concerto', 'symphony',
+    'waltz', 'minuet', 'prelude', 'etude', 'nocturne', 'rondo', 'march',
+    'lullaby', 'hymn', 'ballad', 'chorale', 'canon', 'suite', 'overture',
+    'aria', 'serenade', 'toccata', 'fantasia', 'bagatelle', 'impromptu',
+    'scherzo', 'polonaise', 'mazurka', 'rhapsody', 'music', 'piece',
+    'composition', 'sheet music', 'score'
+  ];
+
+  // Music verbs
+  const musicVerbs = [
+    'compose', 'write a song', 'write a melody', 'write a piece',
+    'write music', 'create a song', 'create a melody', 'create music',
+    'compose a', 'play me', 'write me a'
+  ];
+
+  // Style references that confirm musical intent
+  const styleRefs = [
+    'bach', 'mozart', 'beethoven', 'chopin', 'debussy', 'tchaikovsky',
+    'vivaldi', 'handel', 'haydn', 'schubert', 'brahms', 'liszt',
+    'rachmaninoff', 'prokofiev', 'stravinsky', 'ravel', 'satie',
+    'in the style of', 'key of', 'major key', 'minor key',
+    'c major', 'd minor', 'g major', 'a minor', 'f major', 'e minor',
+    'b flat', 'e flat'
+  ];
+
+  const nounGroup = musicNouns.join('|');
+
+  // Direct verb match: "compose a fugue", "write a song"
+  for (const verb of musicVerbs) {
+    if (lower.includes(verb)) return text;
+  }
+
+  // "create/generate/make + music noun": "create a waltz", "make a prelude"
+  const verbNounPattern = new RegExp(
+    `\\b(create|generate|make|produce|write|give me|i want|i'd like)\\b.+\\b(${nounGroup})\\b`, 'i'
+  );
+  if (verbNounPattern.test(lower)) return text;
+
+  // "a fugue in the style of" — noun + style reference
+  const nounStylePattern = new RegExp(`\\b(${nounGroup})\\b`, 'i');
+  const hasStyleRef = styleRefs.some(s => lower.includes(s));
+  if (nounStylePattern.test(lower) && hasStyleRef) return text;
+
+  return null;
+}
+
+function detectImageRequest(text) {
+  // Explicit /image command
+  if (text.startsWith('/image ')) return text.slice(7);
+
+  // Check if user previously corrected this exact phrase
+  if (isLearnedNotImage(text)) return null;
+
+  const lower = text.toLowerCase();
+
+  // Strong verbs — these clearly mean "create an image" on their own
+  const strongVerbs = [
+    'draw', 'paint', 'sketch', 'illustrate', 'depict', 'visualize'
+  ];
+
+  // Nouns that indicate the output is visual
+  const imageNouns = [
+    'image', 'picture', 'photo', 'photograph', 'painting',
+    'drawing', 'sketch', 'illustration', 'artwork', 'art',
+    'portrait', 'landscape', 'scene', 'poster', 'wallpaper',
+    'icon', 'logo', 'render', 'graphic', 'visual'
+  ];
+
+  const nounGroup = imageNouns.join('|');
+
+  // Strong verbs + article: "draw a cat", "paint me a sunset"
+  const strongVerbPattern = new RegExp(
+    `\\b(${strongVerbs.join('|')})\\b.*\\b(a|an|the|some|me|of)\\b`, 'i'
+  );
+
+  // Generic verbs only trigger when paired with an image noun:
+  // "generate an image of...", "create a painting of...", "make me a picture..."
+  // "i want a drawing of...", "give me a photo of..."
+  const weakVerbPattern = new RegExp(
+    `\\b(generate|create|make|produce|design|render|show me|give me|can you make|i want|i need|i'd like)\\b.+\\b(${nounGroup})\\b`, 'i'
+  );
+
+  // Noun-led patterns: "image of a cat", "picture of mountains"
+  const nounPattern = new RegExp(
+    `\\b(${nounGroup})\\b\\s+(of|with|showing|featuring)\\b`, 'i'
+  );
+
+  // Direct patterns: "a painting of", "an illustration of"
+  const directNounPattern = new RegExp(
+    `\\b(a|an)\\s+(${nounGroup})\\b`, 'i'
+  );
+
+  if (strongVerbPattern.test(lower) || weakVerbPattern.test(lower) ||
+      nounPattern.test(lower) || directNounPattern.test(lower)) {
+    // Strip conversational preamble and extract the actual prompt
+    let prompt = text
+      .replace(/^(can you |could you |please |i want you to |i need you to |i'd like you to |i want |i need )/i, '')
+      .replace(/^(draw|paint|sketch|illustrate|render|generate|create|make|design|produce|depict|visualize|picture)\s+(me\s+)?/i, '')
+      .replace(/^(show me|give me)\s+(a |an )?/i, '')
+      .replace(/^(a |an )(image|picture|photo|photograph|painting|drawing|sketch|illustration|artwork|portrait|render|graphic|visual)\s+(of\s+)?/i, '')
+      .trim();
+    return prompt || text;
+  }
+
+  return null;
+}
+
+async function send() {
+  const text = inputEl.value.trim();
+  if (!text) return;
+
+  // File feedback can be sent even during active analysis
+  const fileFeedback = activeWorkspace ? detectFileFeedback(text) : null;
+  if (fileFeedback) {
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    const basename = fileFeedback.file.split('/').pop();
+    const verb = fileFeedback.action === 'exclude' ? 'skipped'
+               : fileFeedback.action === 'boost' ? 'prioritized'
+               : 'reset';
+    // Save preference first
+    await sendFileFeedback(fileFeedback.action, fileFeedback.file);
+    // If analysis is running, abort and re-run without this file
+    if (isChatting && chatAbort) {
+      showToast(`${basename} — ${verb}, re-analyzing...`);
+      pendingRerun = true;
+      chatAbort.abort();
+    } else {
+      showToast(`${basename} — ${verb} for future analysis`);
+    }
+    inputEl.focus();
+    return;
+  }
+
+  // Context-aware help — works even during active analysis
+  if (/^:?help$/i.test(text)) {
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    const chat = conversations[currentChatId];
+    let helpText = '**Available Commands**\n\n';
+    helpText += '**General:**\n';
+    helpText += '- Type a message to chat with the AI\n';
+    helpText += '- "draw/paint/generate [description]" — generate an image\n';
+    helpText += '- "play/compose [description]" — generate music\n';
+    helpText += '- "not what I meant" / "I meant chat" — correct image misrouting\n';
+    if (activeWorkspace) {
+      helpText += '\n**Code Analysis** (workspace: ' + activeWorkspace.name + '):\n';
+      helpText += '- Ask any question about the code\n';
+      helpText += '- **@filename** — pin a file to include in context\n';
+      helpText += '- **:skip [file]** — exclude a file from future analysis\n';
+      helpText += '- **:ignore [file]** — same as :skip\n';
+      helpText += '- **:prioritize [file]** — always include a file in analysis\n';
+      helpText += '- **:reset [file]** — clear learned preference for a file\n';
+      helpText += '- Colon commands work even during active analysis\n';
+      helpText += '\n**Sliders (Code Preset auto-applied):**\n';
+      helpText += '- Temperature 0.2 — precise, deterministic answers\n';
+      helpText += '- Context 4096 — fits several files (higher = slower)\n';
+      helpText += '- Max Tokens 512 — keeps responses focused\n';
+    } else {
+      helpText += '\n**Code Analysis:**\n';
+      helpText += '- Select a workspace from the sidebar to analyze code\n';
+      helpText += '- Use the Workspace button to upload a directory or clone a repo\n';
+    }
+    helpText += '\n**Settings:**\n';
+    helpText += '- Click the sliders icon to adjust model parameters\n';
+    helpText += '- "Code Preset" button optimizes settings for code analysis\n';
+    helpText += '- "Defaults" restores general chat settings\n';
+    chat.messages.push({ role: 'assistant', content: helpText });
+    renderMessages();
+    inputEl.focus();
+    return;
+  }
+
+  // Block all other sends while chatting
+  if (isChatting) return;
+
+  // ── Self-correcting routing ──
+  if (detectCorrection(text)) {
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    const chat = conversations[currentChatId];
+
+    // Cancel any running image generation
+    if (isDrawing) await cancelImageGen();
+
+    // Find the last user message that was routed to image
+    let correctedIdx = -1;
+    for (let i = chat.messages.length - 1; i >= 0; i--) {
+      if (chat.messages[i].role === 'user' && chat.messages[i].isImageRequest) {
+        correctedIdx = i;
+        break;
+      }
+    }
+
+    if (correctedIdx >= 0) {
+      const original = chat.messages[correctedIdx].content;
+      // Learn this phrase so it won't be routed to image again
+      learnNotImage(original);
+      // Unmark it as an image request
+      chat.messages[correctedIdx].isImageRequest = false;
+      // Remove the image response(s) that followed
+      let removeFrom = correctedIdx + 1;
+      while (removeFrom < chat.messages.length &&
+             chat.messages[removeFrom].role === 'assistant' &&
+             (chat.messages[removeFrom].isImage ||
+              chat.messages[removeFrom].content.includes('Image generation cancelled') ||
+              chat.messages[removeFrom].content.includes('Generating'))) {
+        chat.messages.splice(removeFrom, 1);
+      }
+      renderMessages();
+      // Resend to chat
+      isChatting = true;
+      sendBtn.disabled = true;
+      await streamChat(original);
+      isChatting = false;
+      sendBtn.disabled = false;
+    } else {
+      // No image request found to correct — just treat as normal chat
+      chat.messages.push({ role: 'assistant', content: 'No recent image request to correct.' });
+      renderMessages();
+    }
+    inputEl.focus();
+    return;
+  }
+
+  // When workspace is active, skip music/image detection — always route to chat
+  const musicPrompt = activeWorkspace ? null : detectMusicRequest(text);
+  const imagePrompt = musicPrompt ? null : (activeWorkspace ? null : detectImageRequest(text));
+
+  // Block chat input only for chat (not for image/music requests)
+  if (!imagePrompt && !musicPrompt) {
+    isChatting = true;
+    // Keep send enabled during workspace analysis so user can send
+    // feedback like "skip README.md" while analysis is running
+    sendBtn.disabled = !activeWorkspace;
+  }
+
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+  promptHistoryIndex = -1;
+
+  const chat = conversations[currentChatId];
+  if (chat.messages.length === 0) {
+    chat.title = text.slice(0, 40) + (text.length > 40 ? '...' : '');
+    renderChatList();
+  }
+
+  // Add user message — mark image/music requests so they're excluded from Ollama context
+  chat.messages.push({
+    role: 'user', content: text,
+    isImageRequest: !!imagePrompt,
+    isMusicRequest: !!musicPrompt,
+  });
+
+  // If image is generating, don't full re-render — it would destroy the progress element
+  if (isDrawing || isComposing) {
+    welcomeEl.style.display = 'none';
+    const userEl = createMessageEl('user', text);
+    const progressNode = messagesEl.querySelector('.img-progress') || messagesEl.querySelector('.music-progress');
+    if (progressNode) {
+      messagesEl.insertBefore(userEl, progressNode.closest('.message'));
+    } else {
+      messagesEl.appendChild(userEl);
+    }
+    scrollToBottom();
+  } else {
+    renderMessages();
+  }
+
+  if (musicPrompt) {
+    isComposing = true;
+    generateMusic(musicPrompt).finally(() => { isComposing = false; });
+  } else if (imagePrompt) {
+    // Run image generation in background — don't block chat input
+    isDrawing = true;
+    generateImage(imagePrompt).finally(() => { isDrawing = false; });
+  } else {
+    await streamChat(text);
+    isChatting = false;
+    sendBtn.disabled = false;
+  }
+
+  inputEl.focus();
+}
+
+function showStopButton() {
+  sendBtn.innerHTML = '&#9632;';
+  sendBtn.disabled = false;
+  sendBtn.onclick = stopChat;
+  sendBtn.title = 'Stop generating';
+  sendBtn.style.background = 'var(--danger)';
+}
+
+function restoreSendButton() {
+  sendBtn.innerHTML = '&#10148;';
+  sendBtn.onclick = send;
+  sendBtn.title = '';
+  sendBtn.style.background = '';
+}
+
+function stopChat() {
+  if (chatAbort) chatAbort.abort();
+}
+
+async function streamChat(text) {
+  const chat = conversations[currentChatId];
+  // Exclude image results, image requests, and their responses from Ollama context
+  const ollamaMessages = [];
+
+  // Add streaming placeholder early so user sees immediate feedback
+  const aiMsg = { role: 'assistant', content: '' };
+  chat.messages.push(aiMsg);
+  const msgEl = createMessageEl('assistant', '');
+  const contentEl = msgEl.querySelector('.message-content');
+  messagesEl.appendChild(msgEl);
+  scrollToBottom();
+
+  chatAbort = new AbortController();
+  showStopButton();
+
+  // Inject workspace context if active
+  if (activeWorkspace) {
+    contentEl.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;">' +
+      '<span class="spinner" style="display:inline-block;width:14px;height:14px;vertical-align:middle;margin-right:6px;"></span>' +
+      'Reading code files...</div>';
+    scrollToBottom();
+    try {
+      const numCtx = parseInt(document.getElementById('p-num_ctx').value) || 4096;
+      const ctxRes = await fetch(`/api/workspace/${activeWorkspace.name}/context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: text,
+          mentioned_files: pinnedFiles,
+          num_ctx: numCtx,
+        }),
+      });
+      const ctx = await ctxRes.json();
+      if (ctx.system_prompt) {
+        ollamaMessages.push({ role: 'system', content: ctx.system_prompt });
+      }
+      const fileNames = [];
+      for (const block of (ctx.file_blocks || [])) {
+        ollamaMessages.push({
+          role: 'system',
+          content: `--- File: ${block.path} ---\n${block.content}`,
+        });
+        fileNames.push(block.path);
+      }
+      // Update token display in workspace bar
+      const tokensEl = document.getElementById('ws-bar-tokens');
+      if (tokensEl && ctx.tokens_used) {
+        tokensEl.textContent = `Context: ~${(ctx.tokens_used / 1000).toFixed(1)}k / ${(ctx.tokens_budget / 1000).toFixed(1)}k tokens`;
+      }
+      // Show which files were included, with elapsed timer + Ollama status
+      const fileInfo = fileNames.length ? fileNames.map(f => f.split('/').pop()).join(', ') : 'file tree only';
+      const ctxTokens = ctx.tokens_used || 0;
+      const ctxBudget = ctx.tokens_budget || 0;
+      const analyzeStart = Date.now();
+      contentEl.innerHTML = '<div id="ws-analyze-box" style="color:var(--text-secondary);font-size:12px;line-height:2;">' +
+        '<div><span class="spinner" style="display:inline-block;width:14px;height:14px;vertical-align:middle;margin-right:6px;"></span>' +
+        'Analyzing: ' + fileInfo +
+        ' <span id="ws-analyze-timer">(0s)</span></div>' +
+        '<div id="ws-analyze-detail" style="padding-left:22px;font-size:11px;"></div>' +
+        '<div id="ws-analyze-status" style="padding-left:22px;font-size:11px;">Waiting for model...</div></div>';
+      scrollToBottom();
+      // Tick timer + poll Ollama status with rich detail
+      let lastOllamaInfo = null;
+      const analyzeTimer = setInterval(async () => {
+        const timerEl = document.getElementById('ws-analyze-timer');
+        const statusEl = document.getElementById('ws-analyze-status');
+        const detailEl = document.getElementById('ws-analyze-detail');
+        if (!timerEl) { clearInterval(analyzeTimer); return; }
+        const elapsed = Math.round((Date.now() - analyzeStart) / 1000);
+        timerEl.textContent = `(${elapsed}s)`;
+        // Poll backend status every 2 seconds
+        if (elapsed % 2 === 0 && statusEl) {
+          try {
+            const sr = await fetch('/api/status');
+            const sd = await sr.json();
+            const ollama = sd.tasks?.ollama;
+            const loaded = sd.services?.ollama?.loaded_models?.[0];
+            if (ollama?.active) {
+              const model = ollama.model || '';
+              const ollamaElapsed = Math.round(ollama.elapsed || 0);
+              // Model info
+              let modelInfo = model;
+              if (loaded) {
+                const sizeMB = Math.round((loaded.size || 0) / 1048576);
+                modelInfo += sizeMB ? ` (${(sizeMB / 1024).toFixed(1)}GB in RAM)` : '';
+              }
+              // Build detail line
+              if (detailEl) {
+                detailEl.innerHTML =
+                  `Input: ~${(ctxTokens / 1000).toFixed(1)}k tokens of code context` +
+                  (fileNames.length ? ` from ${fileNames.length} file${fileNames.length > 1 ? 's' : ''}` : '');
+              }
+              statusEl.innerHTML = `<span style="color:var(--accent);">\u2713 ${modelInfo}</span> ` +
+                `\u2014 processing for ${ollamaElapsed}s`;
+              if (!lastOllamaInfo) lastOllamaInfo = ollamaElapsed;
+            } else {
+              statusEl.textContent = 'Waiting for model to load...';
+              if (detailEl) detailEl.textContent = `Sending ~${(ctxTokens / 1000).toFixed(1)}k tokens to model...`;
+            }
+          } catch (e) {}
+        }
+      }, 1000);
+      contentEl._analyzeTimer = analyzeTimer;
+    } catch (e) {
+      console.error('Failed to fetch workspace context:', e);
+    }
+  } else {
+    const typingHtml = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+    contentEl.innerHTML = typingHtml;
+    scrollToBottom();
+  }
+
+  let skipNext = false;
+  for (const m of chat.messages) {
+    if (m.isImage || m.isImageRequest || m.isMusicRequest || m.isMusic ||
+        (m.role === 'user' && detectImageRequest(m.content))) {
+      skipNext = true; continue;
+    }
+    if (skipNext && m.role === 'assistant') { skipNext = false; continue; }
+    skipNext = false;
+    ollamaMessages.push({ role: m.role, content: m.content });
+  }
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: getModelForTask('chat'),
+        messages: ollamaMessages,
+        options: getChatOptions()
+      }),
+      signal: chatAbort.signal
+    });
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let firstToken = true;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = JSON.parse(line.slice(6));
+          if (firstToken) {
+            firstToken = false;
+            if (contentEl._analyzeTimer) clearInterval(contentEl._analyzeTimer);
+            contentEl.innerHTML = '';
+          }
+          if (data.error) {
+            aiMsg.content += `\n\n**Error:** ${data.error}`;
+          } else {
+            aiMsg.content += data.token;
+          }
+          contentEl.innerHTML = formatContent(aiMsg.content);
+          scrollToBottom();
+        }
+      }
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      if (pendingRerun) {
+        // :skip/:prioritize triggered re-run — remove cancelled message and retry
+        pendingRerun = false;
+        if (contentEl._analyzeTimer) clearInterval(contentEl._analyzeTimer);
+        const idx = chat.messages.indexOf(aiMsg);
+        if (idx >= 0) chat.messages.splice(idx, 1);
+        msgEl.remove();
+        chatAbort = null;
+        return streamChat(text);
+      }
+      if (!aiMsg.content) aiMsg.content = '*Cancelled.*';
+    } else {
+      aiMsg.content = `**Error:** Could not connect to Ollama. ${e.message}`;
+    }
+    contentEl.innerHTML = formatContent(aiMsg.content);
+  }
+
+  chatAbort = null;
+  restoreSendButton();
+}
+
+let chatAbort = null;
+let pendingRerun = false;
+let imgGenAbort = null;
+
+async function cancelImageGen() {
+  try { await fetch('/api/image/cancel', { method: 'POST' }); } catch (e) {}
+  if (imgGenAbort) imgGenAbort.abort();
+}
+
+async function skipImageGen() {
+  try { await fetch('/api/image/skip', { method: 'POST' }); } catch (e) {}
+}
+
+async function generateImage(prompt) {
+  const chat = conversations[currentChatId];
+
+  // Show progress with bar and controls
+  const progressEl = createMessageEl('assistant', '');
+  progressEl.querySelector('.message-content').innerHTML = `
+    <div class="img-progress">
+      <div class="img-progress-top">
+        <div class="spinner"></div>
+        <div class="img-progress-label">Generating image on CPU...</div>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill img-bar"></div>
+      </div>
+      <div class="progress-text">
+        <span class="img-step">Starting...</span>
+        <span class="img-eta"></span>
+      </div>
+      <img class="img-preview" style="display:none; max-width:100%; border-radius:6px; opacity:0.85;" />
+      <div class="progress-controls">
+        <button onclick="skipImageGen()" title="Stop early and return the partial result">Skip Remaining Steps</button>
+        <button class="cancel" onclick="cancelImageGen()" title="Cancel entirely and discard">Cancel</button>
+      </div>
+    </div>
+  `;
+  messagesEl.appendChild(progressEl);
+  scrollToBottom();
+
+  // Poll SD progress — scoped to this progressEl so multiple
+  // concurrent requests each update their own progress bubble.
+  // Uses active_prompt from the server to know if our job is
+  // the one currently running.
+  const myPrompt = prompt.substring(0, 100);
+  const progressPoller = setInterval(async () => {
+    try {
+      const r = await fetch('/api/image/progress');
+      const p = await r.json();
+      const bar = progressEl.querySelector('.img-bar');
+      const step = progressEl.querySelector('.img-step');
+      const eta = progressEl.querySelector('.img-eta');
+      const preview = progressEl.querySelector('.img-preview');
+
+      // Check if OUR job is the one currently generating
+      const isMyJob = p.active && p.active_prompt === myPrompt;
+
+      if (!isMyJob) {
+        // Our job isn't running yet — show queue status
+        if (p.queued > 0) {
+          if (step) step.textContent = `Queued (${p.queued} request${p.queued > 1 ? 's' : ''} ahead)`;
+          if (eta) eta.textContent = 'Waiting...';
+        } else if (step) {
+          step.textContent = 'Starting...';
+        }
+        if (bar) bar.style.width = '0%';
+        return;
+      }
+
+      // Our job is running — show real progress
+      if (bar && p.progress > 0) {
+        bar.style.width = p.progress + '%';
+        if (step) step.textContent = `Step ${p.step}/${p.total_steps} (${p.progress}%)`;
+        if (p.eta > 0) {
+          const mins = Math.floor(p.eta / 60);
+          const secs = Math.round(p.eta % 60);
+          if (eta) eta.textContent = mins > 0 ? `~${mins}m ${secs}s remaining` : `~${secs}s remaining`;
+        }
+      }
+      if (preview && p.current_image && p.step > 0) {
+        preview.src = 'data:image/jpeg;base64,' + p.current_image;
+        preview.style.display = 'block';
+        scrollToBottom();
+      }
+    } catch (e) {}
+  }, 1500);
+
+  let cancelled = false;
+  imgGenAbort = new AbortController();
+
+  try {
+    const imgParams = getImageOverrides();
+    imgParams.prompt = prompt;
+    const res = await fetch('/api/image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(imgParams),
+      signal: imgGenAbort.signal
+    });
+    const data = await res.json();
+
+    clearInterval(progressPoller);
+    if (progressEl.parentNode) progressEl.parentNode.removeChild(progressEl);
+
+    if (data.error) {
+      chat.messages.push({ role: 'assistant', content: `**Error:** ${data.error}` });
+    } else if (data.images && data.images.length > 0) {
+      const p = data.params_used;
+      const genInfo = `${p.width}x${p.height} | ${p.steps} steps | ${p.sampler_name} | CFG ${p.cfg_scale} | ${p.generation_time}`;
+      chat.messages.push({
+        role: 'assistant',
+        content: data.images[0],
+        isImage: true,
+        genInfo
+      });
+    }
+  } catch (e) {
+    clearInterval(progressPoller);
+    if (progressEl.parentNode) progressEl.parentNode.removeChild(progressEl);
+    if (e.name === 'AbortError') {
+      cancelled = true;
+      chat.messages.push({ role: 'assistant', content: 'Image generation cancelled.' });
+    } else {
+      // Connection lost — interrupt SD so it doesn't keep rendering
+      try { fetch('/api/image/cancel', { method: 'POST' }); } catch (x) {}
+      chat.messages.push({ role: 'assistant', content: `**Error:** ${e.message}` });
+    }
+  }
+
+  imgGenAbort = null;
+
+  // If chat is streaming, append result directly instead of full re-render
+  if (isChatting) {
+    const lastMsg = chat.messages[chat.messages.length - 1];
+    if (lastMsg) {
+      messagesEl.appendChild(createMessageEl(lastMsg.role, lastMsg.content, lastMsg.isImage, lastMsg.genInfo));
+      scrollToBottom();
+    }
+  } else {
+    renderMessages();
+  }
+}
+
+// ── Music generation ──────────────────────────────────────────────────────
+
+function renderMusicResult(data) {
+  let html = '<div class="music-result">';
+
+  // Description
+  if (data.description) {
+    html += `<div class="description">${formatContent(data.description)}</div>`;
+  }
+
+  // Audio player (MP3) — shown prominently at top
+  if (data.mp3) {
+    html += `
+      <div class="music-player">
+        <div class="player-label">\u266B Audio</div>
+        <audio controls autoplay src="data:audio/mpeg;base64,${data.mp3}"></audio>
+      </div>
+    `;
+  } else if (data.audio_error) {
+    html += `<div style="color: var(--danger); font-size: 13px;">${data.audio_error}</div>`;
+  }
+
+  // Sheet music images
+  if (data.sheet_music && data.sheet_music.length > 0) {
+    const sheetId = 'sheet-' + Date.now();
+    html += `<div class="sheet-music-toggle" onclick="document.getElementById('${sheetId}').style.display = document.getElementById('${sheetId}').style.display === 'none' ? 'block' : 'none'">\u25B6 Show Sheet Music</div>`;
+    html += `<div id="${sheetId}" style="display:none;">`;
+    for (const img of data.sheet_music) {
+      html += `<div class="sheet-music-wrap"><img src="data:image/png;base64,${img}" onclick="const w=window.open('');w.document.write('<img src=&quot;'+this.src+'&quot; style=&quot;max-width:100%&quot;>')"></div>`;
+    }
+    html += '</div>';
+  }
+
+  // LilyPond source toggle
+  if (data.lilypond) {
+    const srcId = 'ly-' + Date.now();
+    html += `<div class="sheet-music-toggle" onclick="document.getElementById('${srcId}').style.display = document.getElementById('${srcId}').style.display === 'none' ? 'block' : 'none'">\u25B6 Show LilyPond Source</div>`;
+    html += `<div class="lilypond-source" id="${srcId}">${data.lilypond.replace(/</g, '&lt;')}</div>`;
+  }
+
+  // Generation time
+  if (data.generation_time) {
+    html += `<div class="music-gen-time">Generated in ${data.generation_time}</div>`;
+  }
+
+  html += '</div>';
+  return html;
+}
+
+async function generateMusic(prompt) {
+  const chat = conversations[currentChatId];
+
+  // Show progress
+  const progressEl = createMessageEl('assistant', '');
+  progressEl.querySelector('.message-content').innerHTML = `
+    <div class="music-progress" style="background: var(--input-bg); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="spinner"></div>
+        <div id="music-progress-label">Composing music...</div>
+      </div>
+      <div style="font-size: 12px; color: var(--text-secondary);" id="music-progress-phase">Sending prompt to Ollama</div>
+    </div>
+  `;
+  messagesEl.appendChild(progressEl);
+  scrollToBottom();
+
+  // Poll music progress
+  const progressPoller = setInterval(async () => {
+    try {
+      const r = await fetch('/api/music/progress');
+      const p = await r.json();
+      const label = document.getElementById('music-progress-label');
+      const phase = document.getElementById('music-progress-phase');
+      if (label && p.active) {
+        const phases = {
+          composing: 'Composing with Ollama...',
+          engraving: 'Engraving sheet music (LilyPond)...',
+          synthesizing: 'Synthesizing audio (MIDI \u2192 WAV)...',
+          encoding: 'Encoding MP3...',
+        };
+        label.textContent = phases[p.phase] || 'Processing...';
+        if (p.elapsed > 0) {
+          phase.textContent = `${Math.round(p.elapsed)}s elapsed`;
+        }
+      }
+    } catch (e) {}
+  }, 1500);
+
+  musicAbort = new AbortController();
+
+  try {
+    const res = await fetch('/api/music', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: prompt,
+        model: getModelForTask('music'),
+      }),
+      signal: musicAbort.signal,
+    });
+    const data = await res.json();
+
+    clearInterval(progressPoller);
+    if (progressEl.parentNode) progressEl.parentNode.removeChild(progressEl);
+
+    if (data.error) {
+      let errorMsg = `**Error:** ${data.error}`;
+      if (data.details) errorMsg += `\n\n\`\`\`\n${data.details}\n\`\`\``;
+      if (data.lilypond) errorMsg += `\n\n**LilyPond source:**\n\`\`\`\n${data.lilypond}\n\`\`\``;
+      if (data.description) errorMsg += `\n\n${data.description}`;
+      if (data.raw_response) errorMsg += `\n\n**Raw response:**\n${data.raw_response}`;
+      chat.messages.push({ role: 'assistant', content: errorMsg });
+    } else {
+      chat.messages.push({
+        role: 'assistant',
+        content: data.description || 'Music generated',
+        isMusic: true,
+        musicData: data,
+      });
+    }
+  } catch (e) {
+    clearInterval(progressPoller);
+    if (progressEl.parentNode) progressEl.parentNode.removeChild(progressEl);
+    if (e.name === 'AbortError') {
+      chat.messages.push({ role: 'assistant', content: 'Music generation cancelled.' });
+    } else {
+      chat.messages.push({ role: 'assistant', content: `**Error:** ${e.message}` });
+    }
+  }
+
+  musicAbort = null;
+
+  if (isChatting) {
+    const lastMsg = chat.messages[chat.messages.length - 1];
+    if (lastMsg) {
+      messagesEl.appendChild(createMessageEl(
+        lastMsg.role, lastMsg.content, false, null, lastMsg.musicData
+      ));
+      scrollToBottom();
+    }
+  } else {
+    renderMessages();
+  }
+}
+
+async function startTune() {
+  const btn = document.getElementById('tune-btn');
+  const status = document.getElementById('tune-status');
+  btn.style.pointerEvents = 'none';
+  btn.style.opacity = '0.5';
+  btn.textContent = 'Tuning...';
+  status.textContent = 'Starting auto-tune...';
+
+  try {
+    await fetch('/api/tune', { method: 'POST' });
+    pollTuneStatus();
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+    btn.style.pointerEvents = '';
+    btn.style.opacity = '';
+    btn.textContent = 'Auto-Tune SD';
+  }
+}
+
+let tunePoller = null;
+function pollTuneStatus() {
+  const btn = document.getElementById('tune-btn');
+  const status = document.getElementById('tune-status');
+  const resultsEl = document.getElementById('tune-results');
+  btn.style.pointerEvents = 'none';
+  btn.style.opacity = '0.5';
+  btn.textContent = 'Tuning...';
+
+  if (tunePoller) clearInterval(tunePoller);
+  tunePoller = setInterval(async () => {
+    try {
+      const res = await fetch('/api/tune');
+      const data = await res.json();
+      status.textContent = data.progress || '';
+
+      if (!data.running) {
+        clearInterval(tunePoller);
+        tunePoller = null;
+        btn.style.pointerEvents = '';
+        btn.style.opacity = '';
+        btn.textContent = 'Re-Tune SD';
+        document.getElementById('reset-tune-btn').style.display = 'block';
+
+        if (data.results) {
+          status.textContent = `Optimal: ${data.results.sampler_name}, ${data.results.steps} steps, ${data.results.width}x${data.results.height}, ${data.results.best_threads} threads`;
+          const benchmarks = data.results.benchmark_results || [];
+          if (benchmarks.length > 0) {
+            const fastest = Math.min(...benchmarks.map(b => b.time));
+            let html = '<table>';
+            benchmarks.forEach(b => {
+              const label = b.sampler ? `${b.sampler} ${b.steps}st ${b.res}` : b.test;
+              const cls = b.time === fastest ? 'fastest' : '';
+              html += `<tr><td>${label}</td><td class="${cls}">${b.time}s</td></tr>`;
+            });
+            html += '</table>';
+            resultsEl.innerHTML = html;
+          }
+          refreshResourceInfo();
+        }
+      }
+    } catch (e) {
+      // Silently retry
+    }
+  }, 3000);
+}
+
+async function resetTune() {
+  try {
+    await fetch('/api/tune', { method: 'DELETE' });
+    document.getElementById('tune-btn').textContent = 'Auto-Tune SD';
+    document.getElementById('reset-tune-btn').style.display = 'none';
+    document.getElementById('tune-status').textContent = 'Reset to defaults.';
+    document.getElementById('tune-results').innerHTML = '';
+    refreshResourceInfo();
+  } catch (e) {
+    document.getElementById('tune-status').textContent = 'Error: ' + e.message;
+  }
+}
+
+// ── Model Management ────────────────────────────────────────────────────────
+
+async function openModels() {
+  document.getElementById('model-modal').classList.add('open');
+  refreshOllamaModels();
+  refreshSDModels();
+  syncAllToModal();
+  // Populate sampler dropdown in modal
+  const mSampler = document.getElementById('m-sampler');
+  const pSampler = document.getElementById('p-sampler');
+  if (mSampler.options.length <= 1 && pSampler.options.length > 1) {
+    for (const opt of pSampler.options) {
+      if (opt.value && !mSampler.querySelector('option[value="'+opt.value+'"]')) {
+        mSampler.appendChild(opt.cloneNode(true));
+      }
+    }
+  }
+  mSampler.value = pSampler.value;
+  // Update tune button state
+  try {
+    const res = await fetch('/api/resources');
+    const data = await res.json();
+    if (data.is_tuned) {
+      document.getElementById('tune-btn').textContent = 'Re-Tune SD';
+      document.getElementById('reset-tune-btn').style.display = 'inline-block';
+      document.getElementById('tune-status').textContent = 'Tuned: ' + (data.tuned_at || '');
+    }
+    if (data.tuning && data.tuning.running) pollTuneStatus();
+  } catch (e) {}
+}
+
+function closeModels() {
+  document.getElementById('model-modal').classList.remove('open');
+}
+
+// Close modal on overlay click
+document.getElementById('model-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeModels();
+});
+document.getElementById('ws-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeWorkspaceModal();
+});
+document.getElementById('file-viewer-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeFileViewer();
+});
+
+function setOllamaPull(name) {
+  document.getElementById('ollama-pull-name').value = name;
+}
+
+function formatSize(bytes) {
+  if (bytes > 1e9) return (bytes / 1e9).toFixed(1) + ' GB';
+  if (bytes > 1e6) return (bytes / 1e6).toFixed(0) + ' MB';
+  return bytes + ' B';
+}
+
+async function refreshOllamaModels() {
+  const tbody = document.getElementById('ollama-model-list');
+  tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-secondary)">Loading...</td></tr>';
+  try {
+    const res = await fetch('/api/ollama/models');
+    const data = await res.json();
+    if (data.models.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-secondary)">No models installed</td></tr>';
+      return;
+    }
+    const currentModel = modelSelect.value;
+    tbody.innerHTML = data.models.map(m => `
+      <tr>
+        <td>${m.name} ${m.name === currentModel ? '<span class="active-badge">ACTIVE</span>' : ''}</td>
+        <td>${formatSize(m.size)}</td>
+        <td>${m.params || '-'}</td>
+        <td>${m.quant || '-'}</td>
+        <td class="model-actions">
+          <button class="primary" onclick="selectOllamaModel('${m.name}')">Use</button>
+          <button class="danger" onclick="deleteOllamaModel('${m.name}')">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--danger)">Error: ' + e.message + '</td></tr>';
+  }
+}
+
+function selectOllamaModel(name) {
+  // Update the sidebar select
+  let found = false;
+  for (const opt of modelSelect.options) {
+    if (opt.value === name) { found = true; break; }
+  }
+  if (!found) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    modelSelect.appendChild(opt);
+  }
+  modelSelect.value = name;
+  refreshOllamaModels();
+  refreshResourceInfo();
+}
+
+async function deleteOllamaModel(name) {
+  if (!confirm('Delete model "' + name + '"? This cannot be undone.')) return;
+  try {
+    await fetch('/api/ollama/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    refreshOllamaModels();
+    // Refresh sidebar model list
+    const modelsRes = await fetch('/api/models');
+    const modelsData = await modelsRes.json();
+    modelSelect.innerHTML = '';
+    modelsData.models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m;
+      modelSelect.appendChild(opt);
+    });
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function pullOllamaModel() {
+  const nameInput = document.getElementById('ollama-pull-name');
+  const btn = document.getElementById('ollama-pull-btn');
+  const progress = document.getElementById('ollama-pull-progress');
+  const name = nameInput.value.trim();
+  if (!name) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Pulling...';
+  progress.textContent = 'Connecting...';
+
+  try {
+    const res = await fetch('/api/ollama/pull', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const d = JSON.parse(line.slice(6));
+            if (d.error) {
+              progress.textContent = 'Error: ' + d.error;
+            } else if (d.total && d.completed) {
+              const pct = Math.round(d.completed / d.total * 100);
+              progress.textContent = d.status + ' ' + pct + '% (' + formatSize(d.completed) + ' / ' + formatSize(d.total) + ')';
+            } else {
+              progress.textContent = d.status || JSON.stringify(d);
+            }
+          } catch (e) {}
+        }
+      }
+    }
+    progress.textContent = 'Done! Model ready.';
+    refreshOllamaModels();
+    // Refresh sidebar
+    const modelsRes = await fetch('/api/models');
+    const modelsData = await modelsRes.json();
+    modelSelect.innerHTML = '';
+    modelsData.models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m;
+      modelSelect.appendChild(opt);
+    });
+  } catch (e) {
+    progress.textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Pull';
+}
+
+// ── Ollama Search ──────────────────────────────────────────────────────────
+
+function searchOllamaQuick(query) {
+  document.getElementById('ollama-search-query').value = query;
+  searchOllamaModels();
+}
+
+async function searchOllamaModels() {
+  const query = document.getElementById('ollama-search-query').value.trim();
+  const resultsEl = document.getElementById('ollama-search-results');
+  const btn = document.getElementById('ollama-search-btn');
+
+  btn.disabled = true;
+  btn.textContent = 'Searching...';
+  resultsEl.innerHTML = '<div style="color:var(--text-secondary); padding:8px;">Searching Ollama library...</div>';
+
+  try {
+    const res = await fetch('/api/ollama/search?q=' + encodeURIComponent(query));
+    const data = await res.json();
+    if (data.error) {
+      resultsEl.innerHTML = '<div style="color:var(--danger); padding:8px;">Error: ' + data.error + '</div>';
+    } else if (data.models.length === 0) {
+      resultsEl.innerHTML = '<div style="color:var(--text-secondary); padding:8px;">No models found.</div>';
+    } else {
+      resultsEl.innerHTML = data.models.map(m => {
+        const desc = m.description || '';
+        const sizes = m.sizes ? ' <span style="color:var(--text-secondary)">(' + m.sizes + ')</span>' : '';
+        return `
+          <div class="search-result">
+            <div class="sr-info">
+              <div class="sr-name">${m.name}${sizes}</div>
+              <div class="sr-meta">${desc}</div>
+            </div>
+            <div class="model-actions">
+              <button class="primary" onclick="setOllamaPull('${m.name}'); pullOllamaModel();">Pull</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  } catch (e) {
+    resultsEl.innerHTML = '<div style="color:var(--danger); padding:8px;">Error: ' + e.message + '</div>';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Search';
+}
+
+// ── SD Model Management ─────────────────────────────────────────────────────
+
+function searchSDQuick(query) {
+  document.getElementById('sd-search-query').value = query;
+  searchSDModels();
+}
+
+async function searchSDModels() {
+  const query = document.getElementById('sd-search-query').value.trim();
+  const resultsEl = document.getElementById('sd-search-results');
+  const btn = document.getElementById('sd-search-btn');
+  if (!query) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Searching...';
+  resultsEl.innerHTML = '<div style="color:var(--text-secondary); padding:8px;">Searching HuggingFace...</div>';
+  try {
+    const res = await fetch('/api/sd/search?q=' + encodeURIComponent(query));
+    const data = await res.json();
+    if (data.error) {
+      resultsEl.innerHTML = '<div style="color:var(--danger); padding:8px;">Error: ' + data.error + '</div>';
+    } else if (data.models.length === 0) {
+      resultsEl.innerHTML = '<div style="color:var(--text-secondary); padding:8px;">No models found. Try a different search term.</div>';
+    } else {
+      resultsEl.innerHTML = data.models.map(m => {
+        const dl = m.downloads > 1000 ? (m.downloads / 1000).toFixed(1) + 'k' : m.downloads;
+        const tags = m.tags.map(t => '<span class="sr-tag">' + t + '</span>').join('');
+        const archBadge = m.arch === 'sdxl'
+          ? '<span class="sr-tag" style="background:#a85;color:#fff;" title="SDXL models are very large (~6GB) and slow on CPU">SDXL - slow on CPU</span>'
+          : '<span class="sr-tag" style="background:#5a5;color:#fff;">SD 1.5</span>';
+        return `
+          <div class="search-result">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div class="sr-info" style="flex:1;">
+                <div class="sr-name">${m.name} ${archBadge}</div>
+                <div class="sr-author">${m.author}</div>
+                <div class="sr-meta">${dl} downloads | ${m.likes} likes</div>
+                <div class="sr-tags">${tags}</div>
+              </div>
+              <div class="model-actions">
+                <button class="primary" onclick="browseSDRepo('${m.id}', this)">Files</button>
+              </div>
+            </div>
+            <div class="sr-inline-files" style="display:none;"></div>
+          </div>
+        `;
+      }).join('');
+    }
+  } catch (e) {
+    resultsEl.innerHTML = '<div style="color:var(--danger); padding:8px;">Error: ' + e.message + '</div>';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Search';
+}
+
+async function browseSDRepo(repoId, btn) {
+  // Close any other open file lists
+  document.querySelectorAll('.sr-inline-files').forEach(el => { el.style.display = 'none'; el.innerHTML = ''; });
+
+  const resultEl = btn.closest('.search-result');
+  const listEl = resultEl.querySelector('.sr-inline-files');
+  listEl.style.display = 'block';
+  listEl.innerHTML = '<div style="color:var(--text-secondary); padding:8px;">Loading files...</div>';
+  resultEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  try {
+    const res = await fetch('/api/sd/browse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo_id: repoId })
+    });
+    const data = await res.json();
+    if (data.error) {
+      listEl.innerHTML = '<div style="color:var(--danger); padding:8px;">Error: ' + data.error + '</div>';
+    } else if (data.files.length === 0) {
+      listEl.innerHTML = '<div style="color:var(--text-secondary); padding:8px;">No compatible checkpoint files found in this repo.</div>';
+    } else {
+      listEl.innerHTML = data.files.map(f => {
+        const size = f.size > 0 ? formatSize(f.size) : '';
+        const shortName = f.filename.split('/').pop();
+        const rec = f.recommended ? '<span class="sr-tag" style="background:#5a5;color:#fff;">Recommended</span> ' : '';
+        const varTags = (f.tags || []).map(t => {
+          const labels = {
+            inpainting: ['inpainting', '#668', 'For filling in parts of existing images'],
+            fp16: ['fp16 (smaller)', '#886', 'Half precision — smaller file, same quality on GPU'],
+            pruned: ['pruned', '#676', 'Training weights removed — smaller, same output'],
+            ckpt: ['ckpt format', '#666', 'Older format — safetensors is preferred'],
+          };
+          const [label, bg, tip] = labels[t] || [t, '#555', ''];
+          return '<span class="sr-tag" style="background:' + bg + ';color:#fff;" title="' + tip + '">' + label + '</span>';
+        }).join(' ');
+        return `
+          <div class="file-item">
+            <div class="fi-name">${shortName} ${rec}${varTags}</div>
+            <div class="fi-size">${size}</div>
+            <div class="model-actions" style="min-width:140px; text-align:right;">
+              <button class="primary" onclick="startSDDownload('${f.download_url}', '${shortName}', this)">Download</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  } catch (e) {
+    listEl.innerHTML = '<div style="color:var(--danger); padding:8px;">Error: ' + e.message + '</div>';
+  }
+}
+
+function startSDDownload(url, filename, btn) {
+  // Replace the button with a compact progress indicator (same space)
+  const actionsEl = btn.closest('.model-actions');
+  actionsEl.innerHTML = `
+    <div style="min-width:140px;">
+      <div class="sd-dl-text" style="font-size:11px; color:var(--text-secondary); text-align:right; margin-bottom:2px;">Starting...</div>
+      <div style="background:var(--input-bg); border-radius:3px; height:5px; overflow:hidden;">
+        <div class="sd-dl-bar" style="height:100%; width:0%; background:var(--accent); transition:width 0.3s;"></div>
+      </div>
+    </div>`;
+  const progressEl = actionsEl.querySelector('.sd-dl-text');
+  const bar = actionsEl.querySelector('.sd-dl-bar');
+
+  fetch('/api/sd/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, filename })
+  }).then(r => r.json()).then(data => {
+    if (data.error) {
+      progressEl.textContent = data.error;
+      progressEl.style.color = 'var(--danger)';
+      return;
+    }
+    const poller = setInterval(async () => {
+      try {
+        const r = await fetch('/api/sd/download');
+        const d = await r.json();
+        progressEl.textContent = d.progress || '';
+        const pctMatch = (d.progress || '').match(/([\d.]+)%/);
+        if (pctMatch) bar.style.width = pctMatch[1] + '%';
+        if (!d.active) {
+          clearInterval(poller);
+          if (d.progress === 'Complete') {
+            bar.style.width = '100%';
+            bar.style.background = 'var(--success, #5a5)';
+            progressEl.innerHTML = '<span style="color:var(--success, #5a5);">Done!</span>';
+            refreshSDModels();
+          } else {
+            progressEl.style.color = 'var(--danger)';
+          }
+        }
+      } catch (e) {}
+    }, 1500);
+  }).catch(e => {
+    progressEl.textContent = e.message;
+    progressEl.style.color = 'var(--danger)';
+  });
+}
+
+async function downloadSDModelWithName(url, filename) {
+  // Legacy entry point for the manual URL download
+  const btn = document.getElementById('sd-download-btn');
+  const progress = document.getElementById('sd-download-progress');
+  btn.disabled = true;
+  progress.textContent = 'Starting download of ' + filename + '...';
+  try {
+    const res = await fetch('/api/sd/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, filename })
+    });
+    const data = await res.json();
+    if (data.error) { progress.textContent = 'Error: ' + data.error; btn.disabled = false; return; }
+    const poller = setInterval(async () => {
+      try {
+        const r = await fetch('/api/sd/download');
+        const d = await r.json();
+        progress.textContent = (d.filename || '') + ': ' + (d.progress || '');
+        if (!d.active) {
+          clearInterval(poller); btn.disabled = false;
+          if (d.progress === 'Complete') { progress.textContent = 'Done! "' + d.filename + '" is ready.'; refreshSDModels(); }
+        }
+      } catch (e) {}
+    }, 2000);
+  } catch (e) { progress.textContent = 'Error: ' + e.message; btn.disabled = false; }
+}
+
+async function refreshSDModels() {
+  const tbody = document.getElementById('sd-model-list');
+  tbody.innerHTML = '<tr><td colspan="3" style="color:var(--text-secondary)">Loading...</td></tr>';
+  try {
+    const res = await fetch('/api/sd/models');
+    const data = await res.json();
+    if (data.models.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="color:var(--text-secondary)">No models found</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.models.map(m => {
+      const isActive = m.title === data.active;
+      const nameForFile = m.title.split(' ')[0];
+      return `
+        <tr>
+          <td>${m.title} ${isActive ? '<span class="active-badge">ACTIVE</span>' : ''}</td>
+          <td style="font-size:11px; color:var(--text-secondary)">${m.hash || '-'}</td>
+          <td class="model-actions">
+            ${isActive ? '' : '<button class="primary" onclick="switchSDModel(\'' + m.title.replace(/'/g, "\\'") + '\')">Use</button>'}
+            ${isActive ? '' : '<button class="danger" onclick="deleteSDModel(\'' + nameForFile.replace(/'/g, "\\'") + '\')">Delete</button>'}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="3" style="color:var(--danger)">Error: ' + e.message + '</td></tr>';
+  }
+}
+
+async function switchSDModel(title) {
+  const tbody = document.getElementById('sd-model-list');
+  tbody.innerHTML = '<tr><td colspan="3" style="color:var(--accent)">Switching model... (this may take a moment)</td></tr>';
+  try {
+    await fetch('/api/sd/switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title })
+    });
+    refreshSDModels();
+  } catch (e) {
+    alert('Error: ' + e.message);
+    refreshSDModels();
+  }
+}
+
+async function deleteSDModel(filename) {
+  if (!confirm('Delete SD model "' + filename + '"? This cannot be undone.')) return;
+  try {
+    await fetch('/api/sd/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename })
+    });
+    refreshSDModels();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function downloadSDModel() {
+  const urlInput = document.getElementById('sd-download-url');
+  const nameInput = document.getElementById('sd-download-name');
+  const btn = document.getElementById('sd-download-btn');
+  const progress = document.getElementById('sd-download-progress');
+
+  const url = urlInput.value.trim();
+  if (!url) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Starting...';
+  progress.textContent = 'Starting download...';
+
+  try {
+    const res = await fetch('/api/sd/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, filename: nameInput.value.trim() })
+    });
+    const data = await res.json();
+    if (data.error) {
+      progress.textContent = 'Error: ' + data.error;
+      btn.disabled = false;
+      btn.textContent = 'Download';
+      return;
+    }
+
+    // Poll progress
+    const poller = setInterval(async () => {
+      try {
+        const r = await fetch('/api/sd/download');
+        const d = await r.json();
+        progress.textContent = d.progress || '';
+        if (!d.active) {
+          clearInterval(poller);
+          btn.style.pointerEvents = '';
+        btn.style.opacity = '';
+          btn.textContent = 'Download';
+          if (d.progress === 'Complete') {
+            progress.textContent = 'Done! Model "' + d.filename + '" is ready.';
+            refreshSDModels();
+          }
+        }
+      } catch (e) {}
+    }, 2000);
+  } catch (e) {
+    progress.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+    btn.textContent = 'Download';
+  }
+}
+
+// ── Parameters Panel ───────────────────────────────────────────────────────
+
+function toggleParams() {
+  document.getElementById('params-panel').classList.toggle('open');
+}
+
+function switchParamsTab(tab) {
+  const tabs = ['chat', 'image', 'models'];
+  const idx = tabs.indexOf(tab);
+  document.querySelectorAll('.params-tab').forEach((t, i) => {
+    t.classList.toggle('active', i === idx);
+  });
+  tabs.forEach(t => {
+    const el = document.getElementById('params-' + t);
+    if (el) el.classList.toggle('active', t === tab);
+  });
+  if (tab === 'models') populateModelRoutingDropdowns();
+}
+
+// ── Per-task model routing ────────────────────────────────────────────────
+
+function getModelRouting() {
+  const defaults = { chat: '', music: '' }; // empty = use sidebar selection
+  try {
+    return JSON.parse(localStorage.getItem('modelRouting')) || defaults;
+  } catch (e) { return defaults; }
+}
+
+function saveModelRouting() {
+  const routing = {
+    chat: document.getElementById('p-model-chat').value,
+    music: document.getElementById('p-model-music').value,
+  };
+  localStorage.setItem('modelRouting', JSON.stringify(routing));
+}
+
+function resetModelRouting() {
+  localStorage.removeItem('modelRouting');
+  populateModelRoutingDropdowns();
+}
+
+function populateModelRoutingDropdowns() {
+  const routing = getModelRouting();
+  const chatSel = document.getElementById('p-model-chat');
+  const musicSel = document.getElementById('p-model-music');
+  if (!chatSel || !musicSel) return;
+
+  // Get available models from the main model dropdown
+  const models = Array.from(document.getElementById('model-select').options).map(o => o.value);
+
+  [chatSel, musicSel].forEach(sel => {
+    const current = sel.value || '';
+    sel.innerHTML = '<option value="">(Use sidebar selection)</option>';
+    models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m;
+      sel.appendChild(opt);
+    });
+  });
+
+  chatSel.value = routing.chat || '';
+  musicSel.value = routing.music || '';
+}
+
+function getModelForTask(task) {
+  const routing = getModelRouting();
+  const assigned = routing[task] || '';
+  if (assigned) return assigned;
+  return document.getElementById('model-select').value;
+}
+
+function getChatOptions() {
+  const opts = {};
+  const temp = parseFloat(document.getElementById('p-temperature').value);
+  if (!isNaN(temp)) opts.temperature = temp;
+  const topp = parseFloat(document.getElementById('p-top_p').value);
+  if (!isNaN(topp)) opts.top_p = topp;
+  const topk = parseInt(document.getElementById('p-top_k').value);
+  if (!isNaN(topk)) opts.top_k = topk;
+  const rep = parseFloat(document.getElementById('p-repeat_penalty').value);
+  if (!isNaN(rep)) opts.repeat_penalty = rep;
+  const ctx = document.getElementById('p-num_ctx').value;
+  if (ctx) opts.num_ctx = parseInt(ctx);
+  const predict = parseInt(document.getElementById('p-num_predict').value);
+  if (!isNaN(predict) && predict !== -1) opts.num_predict = predict;
+  const seed = parseInt(document.getElementById('p-chat-seed').value);
+  if (!isNaN(seed) && seed > 0) opts.seed = seed;
+  return opts;
+}
+
+function getImageOverrides() {
+  const ov = {};
+  const steps = parseInt(document.getElementById('p-steps').value);
+  if (!isNaN(steps)) ov.steps = steps;
+  const cfg = parseFloat(document.getElementById('p-cfg_scale').value);
+  if (!isNaN(cfg)) ov.cfg_scale = cfg;
+  const w = document.getElementById('p-width').value;
+  if (w) ov.width = parseInt(w);
+  const h = document.getElementById('p-height').value;
+  if (h) ov.height = parseInt(h);
+  const sampler = document.getElementById('p-sampler').value;
+  if (sampler) ov.sampler_name = sampler;
+  const seed = parseInt(document.getElementById('p-img-seed').value);
+  if (!isNaN(seed) && seed >= 0) ov.seed = seed;
+  const neg = document.getElementById('p-negative').value.trim();
+  if (neg) ov.negative_prompt = neg;
+  return ov;
+}
+
+function resetChatParams() {
+  document.getElementById('p-temperature').value = 0.8;
+  document.getElementById('pv-temp').textContent = '0.8';
+  document.getElementById('p-top_p').value = 0.9;
+  document.getElementById('pv-topp').textContent = '0.9';
+  document.getElementById('p-top_k').value = 40;
+  document.getElementById('pv-topk').textContent = '40';
+  document.getElementById('p-repeat_penalty').value = 1.1;
+  document.getElementById('pv-rep').textContent = '1.1';
+  document.getElementById('p-num_ctx').value = '';
+  document.getElementById('p-num_predict').value = -1;
+  document.getElementById('p-chat-seed').value = 0;
+}
+
+function setCodePreset() {
+  document.getElementById('p-temperature').value = 0.2;
+  document.getElementById('pv-temp').textContent = '0.2';
+  document.getElementById('p-top_p').value = 0.6;
+  document.getElementById('pv-topp').textContent = '0.6';
+  document.getElementById('p-top_k').value = 15;
+  document.getElementById('pv-topk').textContent = '15';
+  document.getElementById('p-repeat_penalty').value = 1.1;
+  document.getElementById('pv-rep').textContent = '1.1';
+  document.getElementById('p-num_ctx').value = '4096';
+  document.getElementById('p-num_predict').value = 512;
+  document.getElementById('p-chat-seed').value = 0;
+}
+
+function resetImageParams() {
+  document.getElementById('p-steps').value = 15;
+  document.getElementById('pv-steps').textContent = '15';
+  document.getElementById('p-cfg_scale').value = 7;
+  document.getElementById('pv-cfg').textContent = '7';
+  document.getElementById('p-width').value = '';
+  document.getElementById('p-height').value = '';
+  document.getElementById('p-sampler').selectedIndex = 0;
+  document.getElementById('p-img-seed').value = -1;
+  document.getElementById('p-negative').value = 'blurry, low quality, distorted';
+}
+
+// ── Task Status Modal ──────────────────────────────────────────────────────
+
+let statusTimer = null;
+
+function openStatus() {
+  document.getElementById('status-modal').classList.add('open');
+  stRefresh();
+  if (document.getElementById('status-auto-refresh').checked) {
+    statusTimer = setInterval(stRefresh, 3000);
+  }
+}
+
+function closeStatus() {
+  document.getElementById('status-modal').classList.remove('open');
+  if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+}
+
+document.getElementById('status-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeStatus();
+});
+
+document.getElementById('status-auto-refresh').addEventListener('change', function() {
+  if (this.checked && document.getElementById('status-modal').classList.contains('open')) {
+    statusTimer = setInterval(stRefresh, 3000);
+  } else {
+    if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+  }
+});
+
+function stFmtElapsed(s) {
+  if (s < 60) return Math.round(s) + 's';
+  return Math.floor(s / 60) + 'm ' + Math.round(s % 60) + 's';
+}
+
+async function stRefresh() {
+  try {
+    const r = await fetch('/api/status');
+    const data = await r.json();
+    stRender(data);
+    document.getElementById('status-updated').textContent =
+      'Updated: ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    console.error('Status fetch failed', e);
+  }
+}
+
+function stRender(data) {
+  // Ollama
+  const ollama = data.services.ollama || {};
+  document.getElementById('st-ollama-dot').className =
+    'st-dot ' + (ollama.status || 'unreachable');
+
+  let oHtml = `<div class="st-row"><span class="st-label">Status</span><span class="st-value">${ollama.status || 'unknown'}</span></div>`;
+  oHtml += `<div class="st-row"><span class="st-label">Models</span><span class="st-value">${(ollama.models || []).length}</span></div>`;
+  if (ollama.loaded_models && ollama.loaded_models.length > 0) {
+    const names = ollama.loaded_models.map(
+      m => m.name + ' (' + Math.round((m.size||0)/1048576) + 'MB)'
+    ).join(', ');
+    oHtml += `<div class="st-row"><span class="st-label">Loaded</span><span class="st-value" style="color:var(--accent);">${names}</span></div>`;
+  }
+  document.getElementById('st-ollama-info').innerHTML = oHtml;
+
+  const oTask = data.tasks.ollama || {};
+  const oCancelBtn = document.getElementById('st-ollama-cancel');
+  if (oTask.active) {
+    document.getElementById('st-ollama-task').innerHTML = `
+      <div class="st-task">
+        <strong>Active chat${oTask.count > 1 ? ' (' + oTask.count + ')' : ''}</strong>
+        — ${oTask.model} — ${stFmtElapsed(oTask.elapsed)}
+        <div class="prompt">"${oTask.prompt}"</div>
+      </div>`;
+    oCancelBtn.disabled = false;
+  } else {
+    document.getElementById('st-ollama-task').innerHTML =
+      '<div class="st-idle">No active tasks</div>';
+    oCancelBtn.disabled = true;
+  }
+
+  // SD
+  const sd = data.services.sd || {};
+  const sdTask = data.tasks.sd || {};
+  const sdQ = (data.queue && data.queue.sd) || 0;
+  const sdPrompts = (data.queue && data.queue.sd_prompts) || [];
+  document.getElementById('st-sd-dot').className =
+    'st-dot ' + (sd.status || 'unreachable');
+
+  let sHtml = `<div class="st-row"><span class="st-label">Status</span><span class="st-value">${sd.status || 'unknown'}</span></div>`;
+  if (sd.active_model) {
+    sHtml += `<div class="st-row"><span class="st-label">Model</span><span class="st-value">${sd.active_model}</span></div>`;
+  }
+  if (sd.status === 'generating' || sdTask.active) {
+    sHtml += `<div class="st-row"><span class="st-label">Progress</span><span class="st-value">${sd.progress||0}% — Step ${sd.step||0}/${sd.total_steps||'?'}</span></div>`;
+  }
+  if (sdQ > 0) {
+    sHtml += `<div class="st-row"><span class="st-label">Queued</span><span class="st-value" style="color:#f59e0b;">${sdQ} waiting</span></div>`;
+  }
+  document.getElementById('st-sd-info').innerHTML = sHtml;
+
+  const sdCancelBtn = document.getElementById('st-sd-cancel');
+  const sdClearBtn = document.getElementById('st-sd-clear-q');
+  if (sdTask.active || sd.status === 'generating') {
+    const el = sdTask.elapsed ? stFmtElapsed(sdTask.elapsed) : '?';
+    let tHtml = `<div class="st-task">
+      <strong>Generating image</strong> — ${sdTask.model || sd.active_model || '?'} — ${el}
+      <div class="prompt">"${sdTask.prompt || ''}"</div>
+      <div class="st-bar"><div class="st-bar-fill" style="width:${sd.progress||0}%"></div></div>
+    </div>`;
+    if (sdQ > 0) {
+      tHtml += '<div style="margin-top:6px;font-size:11px;color:#f59e0b;">Queued:</div>';
+      sdPrompts.forEach((p, i) => {
+        tHtml += `<div style="font-size:11px;color:var(--text-secondary);padding:2px 0 2px 8px;font-style:italic;">#${i+1} "${p}"</div>`;
+      });
+    }
+    document.getElementById('st-sd-task').innerHTML = tHtml;
+    sdCancelBtn.disabled = false;
+  } else if (sdQ > 0) {
+    let tHtml = `<div class="st-task"><strong>${sdQ} queued</strong> — waiting`;
+    sdPrompts.forEach((p, i) => {
+      tHtml += `<div style="font-size:11px;color:var(--text-secondary);padding:2px 0 2px 8px;font-style:italic;">#${i+1} "${p}"</div>`;
+    });
+    tHtml += '</div>';
+    document.getElementById('st-sd-task').innerHTML = tHtml;
+    sdCancelBtn.disabled = false;
+  } else {
+    document.getElementById('st-sd-task').innerHTML =
+      '<div class="st-idle">No active tasks</div>';
+    sdCancelBtn.disabled = true;
+  }
+  sdClearBtn.disabled = sdQ === 0;
+
+  // Music
+  const mTask = data.tasks.music || {};
+  const mDot = document.getElementById('st-music-dot');
+  const mCancelBtn = document.getElementById('st-music-cancel');
+  if (mTask.active) {
+    mDot.className = 'st-dot generating';
+    const phases = {composing:'Composing', engraving:'Engraving',
+      synthesizing:'Synthesizing', encoding:'Encoding',
+      fixing:'Fixing errors'};
+    const phase = phases[mTask.phase] || mTask.phase || 'Processing';
+    document.getElementById('st-music-task').innerHTML = `
+      <div class="st-task">
+        <strong>${phase}</strong> — ${mTask.model||'?'} — ${stFmtElapsed(mTask.elapsed||0)}
+        <div class="prompt">"${mTask.prompt || ''}"</div>
+      </div>`;
+    mCancelBtn.disabled = false;
+  } else {
+    mDot.className = 'st-dot idle';
+    document.getElementById('st-music-task').innerHTML =
+      '<div class="st-idle">No active tasks</div>';
+    mCancelBtn.disabled = true;
+  }
+}
+
+async function stCancelOllama() {
+  if (!confirm('Cancel Ollama tasks? This will unload all models.')) return;
+  try {
+    await fetch('/api/status/cancel/ollama', {method: 'POST'});
+    setTimeout(stRefresh, 500);
+  } catch (e) { console.error(e); }
+}
+
+async function stCancelSD() {
+  if (!confirm('Cancel image generation and clear queue?')) return;
+  try {
+    await fetch('/api/status/cancel/sd', {method: 'POST'});
+    setTimeout(stRefresh, 500);
+  } catch (e) { console.error(e); }
+}
+
+async function stClearQueue() {
+  if (!confirm('Clear queued requests? Current generation continues.')) return;
+  try {
+    await fetch('/api/status/queue/clear', {method: 'POST'});
+    setTimeout(stRefresh, 500);
+  } catch (e) { console.error(e); }
+}
+
+async function stCancelMusic() {
+  if (!confirm('Cancel music generation?')) return;
+  try {
+    await fetch('/api/status/cancel/music', {method: 'POST'});
+    setTimeout(stRefresh, 500);
+  } catch (e) { console.error(e); }
+}
+
+async function stRestart(name) {
+  if (!confirm('Restart ' + name + '?')) return;
+  try {
+    await fetch('/api/status/restart/' + name, {method: 'POST'});
+    if (name === 'unified-chat') {
+      setTimeout(() => location.reload(), 5000);
+    } else {
+      setTimeout(stRefresh, 3000);
+    }
+  } catch (e) { console.error(e); }
+}
+
+// ── Sync between params panel and Manage Models modal ─────────────────────
+
+// Map modal IDs to params panel IDs and their value display spans
+const paramPairs = [
+  ['m-temperature',    'p-temperature',    'pv-temp',  'mv-temp'],
+  ['m-top_p',          'p-top_p',          'pv-topp',  'mv-topp'],
+  ['m-top_k',          'p-top_k',          'pv-topk',  'mv-topk'],
+  ['m-repeat_penalty', 'p-repeat_penalty', 'pv-rep',   'mv-rep'],
+  ['m-steps',          'p-steps',          'pv-steps',  'mv-steps'],
+  ['m-cfg_scale',      'p-cfg_scale',      'pv-cfg',    'mv-cfg'],
+];
+const selectPairs = [
+  ['m-num_ctx', 'p-num_ctx'], ['m-width', 'p-width'],
+  ['m-height', 'p-height'], ['m-sampler', 'p-sampler'],
+];
+const inputPairs = [
+  ['m-num_predict', 'p-num_predict'], ['m-chat-seed', 'p-chat-seed'],
+  ['m-img-seed', 'p-img-seed'],
+];
+
+function syncParam(src, targetId, targetValId) {
+  document.getElementById(targetId).value = src.value;
+  document.getElementById(targetValId).textContent = src.value;
+  // Update the modal's own value display
+  const srcValId = src.id.replace('m-','mv-').replace('p-','pv-');
+  const srcVal = document.getElementById(srcValId);
+  if (srcVal) srcVal.textContent = src.value;
+}
+
+// Keep modal in sync when params panel controls change
+document.querySelectorAll('#params-chat input, #params-chat select, #params-image input, #params-image select').forEach(el => {
+  el.addEventListener('input', () => syncAllToModal());
+  el.addEventListener('change', () => syncAllToModal());
+});
+
+function syncSelect(src, targetId) {
+  document.getElementById(targetId).value = src.value;
+}
+
+function syncInput(src, targetId) {
+  document.getElementById(targetId).value = src.value;
+}
+
+function syncAllToModal() {
+  paramPairs.forEach(([mId, pId, , mvId]) => {
+    const el = document.getElementById(mId);
+    const src = document.getElementById(pId);
+    if (el && src) { el.value = src.value; }
+    const valEl = document.getElementById(mvId);
+    if (valEl && src) valEl.textContent = src.value;
+  });
+  selectPairs.forEach(([mId, pId]) => {
+    const el = document.getElementById(mId);
+    const src = document.getElementById(pId);
+    if (el && src) el.value = src.value;
+  });
+  inputPairs.forEach(([mId, pId]) => {
+    const el = document.getElementById(mId);
+    const src = document.getElementById(pId);
+    if (el && src) el.value = src.value;
+  });
+}
+
+async function loadSamplers() {
+  try {
+    const res = await fetch('/api/sd/samplers');
+    const data = await res.json();
+    const sel = document.getElementById('p-sampler');
+    sel.innerHTML = '<option value="">Auto (tuned)</option>';
+    (data.samplers || []).forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      sel.appendChild(opt);
+    });
+  } catch (e) {}
+}
+
+async function loadModelDefaults() {
+  const model = modelSelect.value;
+  if (!model) return;
+  try {
+    const res = await fetch('/api/ollama/show', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: model })
+    });
+    const data = await res.json();
+    const info = document.getElementById('chat-model-info');
+    const parts = [];
+    if (data.family) parts.push('Family: ' + data.family);
+    if (data.parameter_size) parts.push('Size: ' + data.parameter_size);
+    if (data.quantization) parts.push('Quant: ' + data.quantization);
+    if (data.context_length) parts.push('Context: ' + data.context_length);
+    info.textContent = parts.join(' | ');
+    // Update defaults from model
+    if (data.defaults) {
+      const d = data.defaults;
+      if (d.temperature !== undefined) {
+        document.getElementById('p-temperature').value = d.temperature;
+        document.getElementById('pv-temp').textContent = d.temperature;
+      }
+      if (d.top_p !== undefined) {
+        document.getElementById('p-top_p').value = d.top_p;
+        document.getElementById('pv-topp').textContent = d.top_p;
+      }
+      if (d.top_k !== undefined) {
+        document.getElementById('p-top_k').value = d.top_k;
+        document.getElementById('pv-topk').textContent = d.top_k;
+      }
+      if (d.repeat_penalty !== undefined) {
+        document.getElementById('p-repeat_penalty').value = d.repeat_penalty;
+        document.getElementById('pv-rep').textContent = d.repeat_penalty;
+      }
+    }
+    syncAllToModal();
+  } catch (e) {}
+}
+
+// Reload model defaults when switching models
+modelSelect.addEventListener('change', loadModelDefaults);
+
+init();
+</script>
+</body>
+</html>

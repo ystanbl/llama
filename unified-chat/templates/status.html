@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Status — Local AI</title>
+<style>
+:root {
+  --bg-main: #343541;
+  --bg-card: #40414f;
+  --bg-sidebar: #202123;
+  --text-primary: #ececf1;
+  --text-secondary: #8e8ea0;
+  --border: #4e4f60;
+  --accent: #10a37f;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  min-height: 100vh;
+  padding: 24px;
+}
+h1 { font-size: 22px; margin-bottom: 8px; }
+.subtitle { color: var(--text-secondary); font-size: 13px; margin-bottom: 24px; }
+.subtitle a { color: var(--accent); text-decoration: none; }
+.subtitle a:hover { text-decoration: underline; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+}
+.card h2 {
+  font-size: 16px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.status-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.status-dot.running { background: var(--accent); }
+.status-dot.idle { background: var(--text-secondary); }
+.status-dot.unreachable { background: var(--danger); }
+.status-dot.generating { background: var(--warning); animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.info-row:last-child { border-bottom: none; }
+.info-label { color: var(--text-secondary); }
+.info-value { text-align: right; max-width: 60%; word-break: break-all; }
+
+.task-active {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.task-active .prompt {
+  color: var(--text-primary);
+  font-style: italic;
+  margin: 6px 0;
+  word-break: break-word;
+}
+.task-none {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-top: 12px;
+}
+.btn-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: opacity 0.15s;
+}
+button:hover { opacity: 0.85; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-cancel { background: var(--danger); color: white; }
+.btn-restart { background: var(--warning); color: #1a1a1a; }
+.btn-refresh { background: var(--accent); color: white; }
+
+.progress-mini {
+  height: 6px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 3px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.progress-mini-fill {
+  height: 100%;
+  background: var(--warning);
+  border-radius: 3px;
+  transition: width 0.5s;
+}
+
+.model-list {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.model-chip {
+  display: inline-block;
+  background: rgba(255,255,255,0.08);
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin: 2px 4px 2px 0;
+  font-size: 12px;
+}
+.model-chip.loaded { background: rgba(16, 163, 127, 0.2); color: var(--accent); }
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: white;
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 100;
+}
+.toast.show { opacity: 1; }
+.toast.success { background: var(--accent); }
+.toast.error { background: var(--danger); }
+
+.auto-refresh {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.auto-refresh label { cursor: pointer; }
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+.header-left h1 { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<div class="header-row">
+  <div class="header-left">
+    <h1>System Status</h1>
+    <div class="subtitle"><a href="/">&#8592; Back to Chat</a> &nbsp;|&nbsp; <span id="last-updated"></span></div>
+  </div>
+  <div style="display:flex; gap:12px; align-items:center;">
+    <div class="auto-refresh">
+      <label><input type="checkbox" id="auto-refresh" checked> Auto-refresh</label>
+    </div>
+    <button class="btn-refresh" onclick="refresh()">Refresh</button>
+  </div>
+</div>
+
+<div class="grid">
+  <!-- Ollama Card -->
+  <div class="card" id="ollama-card">
+    <h2><span class="status-dot" id="ollama-dot"></span> Ollama (Chat)</h2>
+    <div id="ollama-info"></div>
+    <div id="ollama-task"></div>
+    <div class="btn-group">
+      <button class="btn-cancel" id="ollama-cancel-btn" onclick="cancelOllama()" disabled>Cancel Task</button>
+      <button class="btn-restart" onclick="restartService('ollama')">Restart Service</button>
+    </div>
+  </div>
+
+  <!-- Stable Diffusion Card -->
+  <div class="card" id="sd-card">
+    <h2><span class="status-dot" id="sd-dot"></span> Stable Diffusion (Images)</h2>
+    <div id="sd-info"></div>
+    <div id="sd-task"></div>
+    <div class="btn-group">
+      <button class="btn-cancel" id="sd-cancel-btn" onclick="cancelSD()" disabled>Cancel Task</button>
+      <button class="btn-cancel" id="sd-clear-queue-btn" onclick="clearSDQueue()" disabled style="background:var(--warning);color:#1a1a1a;">Clear Queue</button>
+      <button class="btn-restart" onclick="restartService('sd')">Restart Service</button>
+    </div>
+  </div>
+
+  <!-- Music Generation Card -->
+  <div class="card" id="music-card">
+    <h2><span class="status-dot" id="music-dot"></span> Music Generation</h2>
+    <div id="music-info">
+      <div class="info-row"><span class="info-label">Pipeline</span><span class="info-value">Ollama &rarr; LilyPond &rarr; Timidity &rarr; MP3</span></div>
+    </div>
+    <div id="music-task"></div>
+    <div class="btn-group">
+      <button class="btn-cancel" id="music-cancel-btn" onclick="cancelMusic()" disabled>Cancel Task</button>
+    </div>
+  </div>
+
+  <!-- Unified Chat Card -->
+  <div class="card">
+    <h2><span class="status-dot running"></span> Unified Chat (This Service)</h2>
+    <div class="info-row">
+      <span class="info-label">Status</span>
+      <span class="info-value">Running</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Port</span>
+      <span class="info-value">443 (HTTPS)</span>
+    </div>
+    <div class="btn-group">
+      <button class="btn-restart" onclick="restartService('unified-chat')">Restart Service</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+let refreshTimer = null;
+
+function formatElapsed(seconds) {
+  if (seconds < 60) return Math.round(seconds) + 's';
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return m + 'm ' + s + 's';
+}
+
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + (type || 'success');
+  setTimeout(() => el.className = 'toast', 3000);
+}
+
+async function refresh() {
+  try {
+    const r = await fetch('/api/status');
+    const data = await r.json();
+    renderStatus(data);
+    document.getElementById('last-updated').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    toast('Failed to fetch status: ' + e.message, 'error');
+  }
+}
+
+function renderStatus(data) {
+  // Ollama
+  const ollama = data.services.ollama || {};
+  const ollamaDot = document.getElementById('ollama-dot');
+  const ollamaInfo = document.getElementById('ollama-info');
+  const ollamaTask = document.getElementById('ollama-task');
+  const ollamaCancelBtn = document.getElementById('ollama-cancel-btn');
+
+  ollamaDot.className = 'status-dot ' + (ollama.status || 'unreachable');
+
+  let ollamaHtml = `
+    <div class="info-row"><span class="info-label">Status</span><span class="info-value">${ollama.status || 'unknown'}</span></div>
+    <div class="info-row"><span class="info-label">Installed Models</span><span class="info-value">${(ollama.models || []).length}</span></div>
+  `;
+
+  if (ollama.loaded_models && ollama.loaded_models.length > 0) {
+    ollamaHtml += '<div class="info-row"><span class="info-label">Loaded in Memory</span><span class="info-value">';
+    ollama.loaded_models.forEach(m => {
+      const sizeMB = Math.round((m.size || 0) / 1048576);
+      ollamaHtml += `<span class="model-chip loaded">${m.name} (${sizeMB}MB)</span>`;
+    });
+    ollamaHtml += '</span></div>';
+  }
+
+  if (ollama.models && ollama.models.length > 0) {
+    ollamaHtml += '<div class="model-list">';
+    ollama.models.forEach(m => { ollamaHtml += `<span class="model-chip">${m}</span>`; });
+    ollamaHtml += '</div>';
+  }
+  ollamaInfo.innerHTML = ollamaHtml;
+
+  const ollamaTaskData = data.tasks.ollama || {};
+  if (ollamaTaskData.active) {
+    ollamaTask.innerHTML = `
+      <div class="task-active">
+        <strong>Active chat${ollamaTaskData.count > 1 ? ' (' + ollamaTaskData.count + ' concurrent)' : ''}</strong>
+        — ${ollamaTaskData.model} — ${formatElapsed(ollamaTaskData.elapsed)}
+        <div class="prompt">"${ollamaTaskData.prompt}"</div>
+      </div>
+    `;
+    ollamaCancelBtn.disabled = false;
+  } else {
+    ollamaTask.innerHTML = '<div class="task-none">No active tasks</div>';
+    ollamaCancelBtn.disabled = true;
+  }
+
+  // Stable Diffusion
+  const sd = data.services.sd || {};
+  const sdDot = document.getElementById('sd-dot');
+  const sdInfo = document.getElementById('sd-info');
+  const sdTask = document.getElementById('sd-task');
+  const sdCancelBtn = document.getElementById('sd-cancel-btn');
+
+  sdDot.className = 'status-dot ' + (sd.status || 'unreachable');
+
+  let sdHtml = `
+    <div class="info-row"><span class="info-label">Status</span><span class="info-value">${sd.status || 'unknown'}</span></div>
+  `;
+  if (sd.active_model) {
+    sdHtml += `<div class="info-row"><span class="info-label">Active Model</span><span class="info-value">${sd.active_model}</span></div>`;
+  }
+
+  const sdTaskData = data.tasks.sd || {};
+  const sdQueued = (data.queue && data.queue.sd) || 0;
+  if (sd.status === 'generating' || sdTaskData.active) {
+    sdHtml += `
+      <div class="info-row"><span class="info-label">Progress</span><span class="info-value">${sd.progress || 0}% — Step ${sd.step || 0}/${sd.total_steps || '?'}</span></div>
+    `;
+  }
+  if (sdQueued > 0) {
+    sdHtml += `<div class="info-row"><span class="info-label">Queued</span><span class="info-value" style="color:var(--warning);">${sdQueued} request${sdQueued > 1 ? 's' : ''} waiting</span></div>`;
+    const sdPrompts = (data.queue && data.queue.sd_prompts) || [];
+    sdPrompts.forEach((p, i) => {
+      sdHtml += `<div class="info-row"><span class="info-label" style="min-width:24px;">#${i+1}</span><span class="info-value" style="color:var(--text-primary);font-style:italic;max-width:80%;">"${p}"</span></div>`;
+    });
+  }
+  sdInfo.innerHTML = sdHtml;
+
+  const sdClearQueueBtn = document.getElementById('sd-clear-queue-btn');
+
+  if (sdTaskData.active || sd.status === 'generating') {
+    const elapsed = sdTaskData.elapsed ? formatElapsed(sdTaskData.elapsed) : '?';
+    let taskHtml = `
+      <div class="task-active">
+        <strong>Generating image</strong> — ${sdTaskData.model || sd.active_model || '?'} — ${elapsed}
+        <div class="prompt">"${sdTaskData.prompt || 'unknown prompt'}"</div>
+        <div class="progress-mini"><div class="progress-mini-fill" style="width: ${sd.progress || 0}%"></div></div>
+      </div>
+    `;
+    if (sdQueued > 0) {
+      const sdPrompts = (data.queue && data.queue.sd_prompts) || [];
+      taskHtml += '<div style="margin-top:8px;font-size:12px;color:var(--warning);">Queued:</div>';
+      sdPrompts.forEach((p, i) => {
+        taskHtml += `<div style="font-size:12px;color:var(--text-secondary);padding:2px 0 2px 8px;font-style:italic;">#${i+1} "${p}"</div>`;
+      });
+    }
+    sdTask.innerHTML = taskHtml;
+    sdCancelBtn.disabled = false;
+  } else if (sdQueued > 0) {
+    const sdPrompts = (data.queue && data.queue.sd_prompts) || [];
+    let qHtml = `<div class="task-active"><strong>${sdQueued} request${sdQueued > 1 ? 's' : ''} queued</strong> — waiting to start`;
+    sdPrompts.forEach((p, i) => {
+      qHtml += `<div style="font-size:12px;color:var(--text-secondary);padding:2px 0 2px 8px;font-style:italic;">#${i+1} "${p}"</div>`;
+    });
+    qHtml += '</div>';
+    sdTask.innerHTML = qHtml;
+    sdCancelBtn.disabled = false;
+  } else {
+    sdTask.innerHTML = '<div class="task-none">No active tasks</div>';
+    sdCancelBtn.disabled = true;
+  }
+  sdClearQueueBtn.disabled = sdQueued === 0;
+
+  // Music
+  const musicDot = document.getElementById('music-dot');
+  const musicTask = document.getElementById('music-task');
+  const musicCancelBtn = document.getElementById('music-cancel-btn');
+  const musicTaskData = data.tasks.music || {};
+
+  if (musicTaskData.active) {
+    musicDot.className = 'status-dot generating';
+    const phases = { composing: 'Composing', engraving: 'Engraving', synthesizing: 'Synthesizing', encoding: 'Encoding', fixing: 'Fixing errors' };
+    const phase = phases[musicTaskData.phase] || musicTaskData.phase || 'Processing';
+    musicTask.innerHTML = `
+      <div class="task-active">
+        <strong>${phase}</strong> — ${musicTaskData.model || '?'} — ${formatElapsed(musicTaskData.elapsed || 0)}
+        <div class="prompt">"${musicTaskData.prompt || ''}"</div>
+      </div>
+    `;
+    musicCancelBtn.disabled = false;
+  } else {
+    musicDot.className = 'status-dot idle';
+    musicTask.innerHTML = '<div class="task-none">No active tasks</div>';
+    musicCancelBtn.disabled = true;
+  }
+}
+
+async function cancelMusic() {
+  if (!confirm('Cancel the running music generation?')) return;
+  try {
+    await fetch('/api/status/cancel/music', { method: 'POST' });
+    toast('Music generation cancelled');
+    setTimeout(refresh, 500);
+  } catch (e) { toast('Cancel failed: ' + e.message, 'error'); }
+}
+
+async function cancelSD() {
+  if (!confirm('Cancel the running image generation and clear queue?')) return;
+  try {
+    await fetch('/api/status/cancel/sd', { method: 'POST' });
+    toast('SD generation cancelled, queue cleared');
+    setTimeout(refresh, 500);
+  } catch (e) { toast('Cancel failed: ' + e.message, 'error'); }
+}
+
+async function clearSDQueue() {
+  if (!confirm('Clear all queued image requests? The current generation will continue.')) return;
+  try {
+    await fetch('/api/status/queue/clear', { method: 'POST' });
+    toast('Queue cleared');
+    setTimeout(refresh, 500);
+  } catch (e) { toast('Clear queue failed: ' + e.message, 'error'); }
+}
+
+async function cancelOllama() {
+  if (!confirm('Cancel running Ollama tasks? This will unload all models.')) return;
+  try {
+    await fetch('/api/status/cancel/ollama', { method: 'POST' });
+    toast('Ollama tasks cancelled');
+    setTimeout(refresh, 500);
+  } catch (e) { toast('Cancel failed: ' + e.message, 'error'); }
+}
+
+async function restartService(name) {
+  if (!confirm('Restart ' + name + ' service?')) return;
+  try {
+    await fetch('/api/status/restart/' + name, { method: 'POST' });
+    toast(name + ' restarting...');
+    if (name === 'unified-chat') {
+      // Wait for restart then reload
+      setTimeout(() => { location.reload(); }, 5000);
+    } else {
+      setTimeout(refresh, 3000);
+    }
+  } catch (e) { toast('Restart failed: ' + e.message, 'error'); }
+}
+
+// Auto-refresh
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(refresh, 3000);
+}
+
+document.getElementById('auto-refresh').addEventListener('change', function() {
+  if (this.checked) startAutoRefresh();
+  else { clearInterval(refreshTimer); refreshTimer = null; }
+});
+
+// Initial load
+refresh();
+startAutoRefresh();
+</script>
+</body>
+</html>

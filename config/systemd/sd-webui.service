@@ -1,0 +1,36 @@
+[Unit]
+Description=Stable Diffusion WebUI
+After=network.target
+
+[Service]
+Type=simple
+CPUAffinity=0 1 2
+User=llama
+WorkingDirectory=/home/llama/stable-diffusion-webui
+
+# IMPORTANT: CPU-only safe launch
+Environment="COMMANDLINE_ARGS=--opt-sub-quad-attention --listen --api --skip-torch-cuda-test --use-cpu all --no-half"
+Environment="OMP_NUM_THREADS=3"
+Environment="MKL_NUM_THREADS=3"
+Environment="OPENBLAS_NUM_THREADS=3"
+Environment="NUMEXPR_NUM_THREADS=3"
+Environment="TORCH_NUM_THREADS=3"
+Environment="OMP_WAIT_POLICY=ACTIVE"
+Environment="PYTORCH_ENABLE_MPS_FALLBACK=0"
+Environment="ATEN_CPU_CAPABILITY=avx2"
+
+# Prevent interactive git prompts / hangs
+Environment="GIT_TERMINAL_PROMPT=0"
+
+ExecStart=/home/llama/stable-diffusion-webui/webui.sh
+
+Restart=always
+RestartSec=5
+
+# Logs go to journalctl
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=sd-webui
+
+[Install]
+WantedBy=multi-user.target

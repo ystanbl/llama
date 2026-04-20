@@ -1,0 +1,18 @@
+[Unit]
+Description=Ollama Service
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/ollama serve
+User=ollama
+Group=ollama
+Restart=always
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=ollama
+RestartSec=3
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+Environment="OLLAMA_MAX_LOADED_MODELS=1"
+
+[Install]
+WantedBy=default.target

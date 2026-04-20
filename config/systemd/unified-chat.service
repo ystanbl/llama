@@ -1,0 +1,21 @@
+[Unit]
+Description=Local AI Chat (Ollama + Stable Diffusion)
+After=network.target ollama.service sd-webui.service
+
+[Service]
+Type=simple
+User=llama
+WorkingDirectory=/home/llama/llama/unified-chat
+Environment="OLLAMA_URL=http://localhost:11434"
+Environment="SD_URL=http://localhost:7860"
+Environment="SD_MODELS_DIR=/opt/sd-models"
+ExecStart=/home/llama/llama/unified-chat/venv/bin/python app.py
+Restart=always
+RestartSec=5
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=unified-chat
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

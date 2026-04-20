@@ -1,0 +1,406 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "121f9189-5d0d-45a8-a78f-9a3e0d5794c3",
+    "title": "System Resources - llama",
+    "tags": ["system", "monitoring"],
+    "timezone": "browser",
+    "refresh": "10s",
+    "time": { "from": "now-1h", "to": "now" },
+    "panels": [
+      {
+        "id": 1,
+        "title": "CPU Usage per Core (%)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "custom": { "fillOpacity": 15 }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT 100 - mean(\"usage_idle\") FROM \"cpu\" WHERE \"cpu\" != 'cpu-total' AND $timeFilter GROUP BY time($__interval), \"cpu\" fill(null)",
+            "rawQuery": true,
+            "resultFormat": "time_series",
+            "alias": "$tag_cpu"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "CPU Total",
+        "type": "gauge",
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 60 },
+                { "color": "red", "value": 85 }
+              ]
+            }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT 100 - last(\"usage_idle\") FROM \"cpu\" WHERE \"cpu\" = 'cpu-total' AND $timeFilter GROUP BY time($__interval) fill(null)",
+            "rawQuery": true,
+            "resultFormat": "time_series",
+            "alias": "CPU"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Memory",
+        "type": "gauge",
+        "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 70 },
+                { "color": "red", "value": 90 }
+              ]
+            }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT last(\"used_percent\") FROM \"mem\" WHERE $timeFilter GROUP BY time($__interval) fill(null)",
+            "rawQuery": true,
+            "resultFormat": "time_series",
+            "alias": "Memory"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Memory Breakdown",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "custom": { "fillOpacity": 30, "stacking": { "mode": "normal" } }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT mean(\"used\") AS \"Used\", mean(\"buffered\") AS \"Buffered\", mean(\"cached\") AS \"Cached\", mean(\"free\") AS \"Free\" FROM \"mem\" WHERE $timeFilter GROUP BY time($__interval) fill(null)",
+            "rawQuery": true,
+            "resultFormat": "time_series"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Disk Usage (%)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "custom": { "fillOpacity": 10 }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT last(\"used_percent\") FROM \"disk\" WHERE $timeFilter GROUP BY time($__interval), \"path\" fill(null)",
+            "rawQuery": true,
+            "resultFormat": "time_series",
+            "alias": "$tag_path"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Network Traffic",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "Bps",
+            "custom": { "fillOpacity": 15 }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT non_negative_derivative(mean(\"bytes_recv\"), 1s) AS \"Received\", non_negative_derivative(mean(\"bytes_sent\"), 1s) AS \"Sent\" FROM \"net\" WHERE $timeFilter GROUP BY time($__interval), \"interface\" fill(null)",
+            "rawQuery": true,
+            "resultFormat": "time_series"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "System Load Average",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+        "fieldConfig": {
+          "defaults": {
+            "custom": { "fillOpacity": 10 }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT mean(\"load1\") AS \"1min\", mean(\"load5\") AS \"5min\", mean(\"load15\") AS \"15min\" FROM \"system\" WHERE $timeFilter GROUP BY time($__interval) fill(null)",
+            "rawQuery": true,
+            "resultFormat": "time_series"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Service CPU Usage (%)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "custom": { "fillOpacity": 15 }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT mean(\"ollama_cpu_usage\") AS \"ollama\", mean(\"sd_webui_cpu_usage\") AS \"sd-webui\", mean(\"unified_chat_cpu_usage\") AS \"unified-chat\" FROM \"procstat\" WHERE $timeFilter GROUP BY time($__interval) fill(null)",
+            "rawQuery": true,
+            "resultFormat": "time_series"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Service Memory (RSS)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "custom": { "fillOpacity": 15 }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT mean(\"ollama_memory_rss\") AS \"ollama\", mean(\"sd_webui_memory_rss\") AS \"sd-webui\", mean(\"unified_chat_memory_rss\") AS \"unified-chat\" FROM \"procstat\" WHERE $timeFilter GROUP BY time($__interval) fill(null)",
+            "rawQuery": true,
+            "resultFormat": "time_series"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Swap Usage",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "custom": { "fillOpacity": 15 }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT mean(\"used\") AS \"Used\", mean(\"free\") AS \"Free\" FROM \"swap\" WHERE $timeFilter GROUP BY time($__interval) fill(null)",
+            "rawQuery": true,
+            "resultFormat": "time_series"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Disk I/O",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "Bps",
+            "custom": { "fillOpacity": 15 }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT non_negative_derivative(mean(\"read_bytes\"), 1s) AS \"Read\", non_negative_derivative(mean(\"write_bytes\"), 1s) AS \"Write\" FROM \"diskio\" WHERE $timeFilter GROUP BY time($__interval), \"name\" fill(null)",
+            "rawQuery": true,
+            "resultFormat": "time_series"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Image Generation Time by Model",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": { "fillOpacity": 15, "drawStyle": "points", "pointSize": 8 }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT \"generation_time\" FROM \"sd_generation\" WHERE $timeFilter GROUP BY \"model\"",
+            "rawQuery": true,
+            "resultFormat": "time_series",
+            "alias": "$tag_model"
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "title": "Chat Response Time by Model",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": { "fillOpacity": 15, "drawStyle": "points", "pointSize": 8 }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT \"response_time\" FROM \"chat_response\" WHERE $timeFilter GROUP BY \"model\"",
+            "rawQuery": true,
+            "resultFormat": "time_series",
+            "alias": "$tag_model"
+          }
+        ]
+      },
+      {
+        "id": 14,
+        "title": "Chat Tokens/sec by Model",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 48 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": { "fillOpacity": 15, "drawStyle": "points", "pointSize": 8 }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT \"tokens_per_sec\" FROM \"chat_response\" WHERE $timeFilter GROUP BY \"model\"",
+            "rawQuery": true,
+            "resultFormat": "time_series",
+            "alias": "$tag_model"
+          }
+        ]
+      },
+      {
+        "id": 15,
+        "title": "Avg Image Gen Time by Model",
+        "type": "barchart",
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 48 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "color": { "mode": "palette-classic" }
+          }
+        },
+        "options": { "orientation": "horizontal" },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT mean(\"generation_time\") FROM \"sd_generation\" WHERE $timeFilter GROUP BY \"model\"",
+            "rawQuery": true,
+            "resultFormat": "time_series",
+            "alias": "$tag_model"
+          }
+        ]
+      },
+      {
+        "id": 16,
+        "title": "Avg Tokens/sec by Model",
+        "type": "barchart",
+        "gridPos": { "h": 8, "w": 6, "x": 18, "y": 48 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": { "mode": "palette-classic" }
+          }
+        },
+        "options": { "orientation": "horizontal" },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT mean(\"tokens_per_sec\") FROM \"chat_response\" WHERE $timeFilter GROUP BY \"model\"",
+            "rawQuery": true,
+            "resultFormat": "time_series",
+            "alias": "$tag_model"
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "title": "Image Gen: Steps vs Time",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 56 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": { "fillOpacity": 10, "drawStyle": "points", "pointSize": 6 }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT \"generation_time\", \"steps\" FROM \"sd_generation\" WHERE $timeFilter GROUP BY \"model\", \"sampler\"",
+            "rawQuery": true,
+            "resultFormat": "time_series",
+            "alias": "$tag_model / $tag_sampler"
+          }
+        ]
+      },
+      {
+        "id": 18,
+        "title": "Chat Tokens Generated",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 56 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": { "fillOpacity": 15, "drawStyle": "bars" }
+          }
+        },
+        "targets": [
+          {
+            "datasource": { "type": "influxdb", "uid": "cfjka2foh4tmof" },
+            "query": "SELECT \"tokens\" FROM \"chat_response\" WHERE $timeFilter GROUP BY \"model\"",
+            "rawQuery": true,
+            "resultFormat": "time_series",
+            "alias": "$tag_model"
+          }
+        ]
+      }
+    ]
+  },
+  "overwrite": true
+}
