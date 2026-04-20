@@ -2037,46 +2037,73 @@ function isLearnedNotImage(text) {
 function detectFileFeedback(text) {
   if (!activeWorkspace) return null;
 
-  // :command filename — e.g. ":skip README.md", ":prioritize app.py"
+  // :command pattern — e.g. ":skip README.md", ":skip *.service"
   const m = text.match(/^:(\w+)\s+(.+)$/);
   if (!m) return null;
 
   const cmd = m[1].toLowerCase();
-  const matched = matchWorkspaceFile(m[2].trim());
-  if (!matched) return null;
+  const pattern = m[2].trim();
+  const matched = matchWorkspaceFiles(pattern);
+  if (!matched.length) return null;
 
   if (['skip', 'ignore', 'exclude', 'remove', 'drop', 'hide'].includes(cmd)) {
-    return { action: 'exclude', file: matched };
+    return { action: 'exclude', files: matched };
   }
   if (['prioritize', 'boost', 'pin', 'include', 'focus'].includes(cmd)) {
-    return { action: 'boost', file: matched };
+    return { action: 'boost', files: matched };
   }
   if (['reset', 'clear', 'undo', 'default'].includes(cmd)) {
-    return { action: 'reset', file: matched };
+    return { action: 'reset', files: matched };
   }
   return null;
 }
 
-function matchWorkspaceFile(ref) {
-  if (!activeWorkspace) return null;
-  const refLower = ref.toLowerCase().replace(/[@'"]/g, '').trim();
-  // Try exact path, basename, or partial match
+function globToRegex(pattern) {
+  // Convert glob pattern to regex: * = any non-slash, ** = anything, ? = single char
+  let re = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  re = re.replace(/\*\*/g, '\0');
+  re = re.replace(/\*/g, '[^/]*');
+  re = re.replace(/\0/g, '.*');
+  re = re.replace(/\?/g, '.');
+  return new RegExp('^' + re + '$', 'i');
+}
+
+function matchWorkspaceFiles(ref) {
+  if (!activeWorkspace) return [];
+  const refClean = ref.replace(/[@'"]/g, '').trim();
+  const refLower = refClean.toLowerCase();
+  const isGlob = /[*?]/.test(refClean);
+
+  if (isGlob) {
+    const re = globToRegex(refLower);
+    const results = [];
+    for (const f of activeWorkspace.files) {
+      const pathLower = f.path.toLowerCase();
+      const basename = f.path.split('/').pop().toLowerCase();
+      if (re.test(basename) || re.test(pathLower)) {
+        results.push(f.path);
+      }
+    }
+    return results;
+  }
+
+  // Exact match — single file
   for (const f of activeWorkspace.files) {
     const pathLower = f.path.toLowerCase();
     const basename = f.path.split('/').pop().toLowerCase();
     if (basename === refLower || pathLower === refLower ||
         pathLower.endsWith('/' + refLower)) {
-      return f.path;
+      return [f.path];
     }
   }
   // Fuzzy: check if ref is contained in any filename
   for (const f of activeWorkspace.files) {
     const basename = f.path.split('/').pop().toLowerCase();
     if (basename.includes(refLower) && refLower.length >= 3) {
-      return f.path;
+      return [f.path];
     }
   }
-  return null;
+  return [];
 }
 
 function showToast(msg, duration) {
@@ -2225,19 +2252,24 @@ async function send() {
   if (fileFeedback) {
     inputEl.value = '';
     inputEl.style.height = 'auto';
-    const basename = fileFeedback.file.split('/').pop();
     const verb = fileFeedback.action === 'exclude' ? 'skipped'
                : fileFeedback.action === 'boost' ? 'prioritized'
                : 'reset';
-    // Save preference first
-    await sendFileFeedback(fileFeedback.action, fileFeedback.file);
-    // If analysis is running, abort and re-run without this file
+    // Save preferences for all matched files
+    for (const fp of fileFeedback.files) {
+      await sendFileFeedback(fileFeedback.action, fp);
+    }
+    const names = fileFeedback.files.map(f => f.split('/').pop());
+    const label = names.length === 1 ? names[0]
+                : names.length + ' files (' + names.slice(0, 3).join(', ')
+                  + (names.length > 3 ? ', ...' : '') + ')';
+    // If analysis is running, abort and re-run without these files
     if (isChatting && chatAbort) {
-      showToast(`${basename} — ${verb}, re-analyzing...`);
+      showToast(`${label} — ${verb}, re-analyzing...`);
       pendingRerun = true;
       chatAbort.abort();
     } else {
-      showToast(`${basename} — ${verb} for future analysis`);
+      showToast(`${label} — ${verb} for future analysis`);
     }
     inputEl.focus();
     return;
@@ -2258,10 +2290,10 @@ async function send() {
       helpText += '\n**Code Analysis** (workspace: ' + activeWorkspace.name + '):\n';
       helpText += '- Ask any question about the code\n';
       helpText += '- **@filename** — pin a file to include in context\n';
-      helpText += '- **:skip [file]** — exclude a file from future analysis\n';
-      helpText += '- **:ignore [file]** — same as :skip\n';
-      helpText += '- **:prioritize [file]** — always include a file in analysis\n';
-      helpText += '- **:reset [file]** — clear learned preference for a file\n';
+      helpText += '- **:skip [file/glob]** — exclude file(s) from analysis\n';
+      helpText += '- **:prioritize [file/glob]** — always include file(s)\n';
+      helpText += '- **:reset [file/glob]** — clear learned preference\n';
+      helpText += '- Globs supported: `:skip *.service`, `:skip config/*`\n';
       helpText += '- Colon commands work even during active analysis\n';
       helpText += '\n**Sliders (Code Preset auto-applied):**\n';
       helpText += '- Temperature 0.2 — precise, deterministic answers\n';
