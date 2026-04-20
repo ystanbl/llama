@@ -265,25 +265,44 @@ def find_cross_references(content, workspace_files):
                    f["path"].lower().endswith("/" + candidate):
                     referenced.add(f["path"])
 
-    # String literals that match workspace filenames
-    # Catches render_template("x.html"), open("x.cfg"), url_for, etc.
-    for m in re.finditer(r"""['"]([^'"]{2,80})['"]""", content):
+    # String literals in code-loading contexts (render_template, include,
+    # open, url_for, etc.) — only match source/template extensions
+    code_ref_exts = {
+        ".html", ".py", ".js", ".ts", ".jsx", ".tsx", ".vue",
+        ".svelte", ".css", ".scss", ".sql", ".go", ".rs",
+        ".java", ".rb", ".php", ".c", ".cpp", ".h",
+    }
+    # Look for strings near function calls that load files
+    load_pattern = re.compile(
+        r"(?:render_template|include|require|import|open|url_for"
+        r"|send_file|send_from_directory|load|read)"
+        r"""\s*\(\s*['"]([^'"]{2,80})['"]"""
+    )
+    for m in load_pattern.finditer(content):
         literal = m.group(1).strip().replace("\\", "/")
         lit_lower = literal.lower()
         lit_base = os.path.basename(lit_lower)
-
-        # Direct basename match
         if lit_base in basenames:
             for path in basenames[lit_base]:
                 referenced.add(path)
-            continue
+        else:
+            for f in workspace_files:
+                if f["path"].lower() == lit_lower or \
+                   f["path"].lower().endswith("/" + lit_lower):
+                    referenced.add(f["path"])
+                    break
 
-        # Path match (e.g. "templates/index.html")
-        for f in workspace_files:
-            if f["path"].lower() == lit_lower or \
-               f["path"].lower().endswith("/" + lit_lower):
-                referenced.add(f["path"])
-                break
+    # Also match any string literal with a code extension
+    for m in re.finditer(r"""['"]([^'"]{2,80})['"]""", content):
+        literal = m.group(1).strip().replace("\\", "/")
+        lit_ext = os.path.splitext(literal)[1].lower()
+        if lit_ext not in code_ref_exts:
+            continue
+        lit_lower = literal.lower()
+        lit_base = os.path.basename(lit_lower)
+        if lit_base in basenames:
+            for path in basenames[lit_base]:
+                referenced.add(path)
 
     # JS/TS imports: require("./foo"), import x from "./foo"
     for m in re.finditer(
