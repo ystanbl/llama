@@ -352,6 +352,28 @@ def find_relevant_files(query, file_list, prefs=None):
         ".php": ["php", "laravel", "composer", "code"],
     }
 
+    # Source code extensions — files that contain application logic
+    source_exts = {
+        ".py", ".js", ".ts", ".jsx", ".tsx", ".go", ".rs", ".java",
+        ".rb", ".php", ".c", ".cpp", ".h", ".hpp", ".cs", ".swift",
+        ".kt", ".scala", ".lua", ".r", ".m", ".html", ".css",
+        ".vue", ".svelte",
+    }
+
+    # Ops/infra extensions — only relevant if query is about deploy/config
+    ops_exts = {
+        ".service", ".conf", ".cfg", ".ini", ".env", ".toml",
+        ".yml", ".yaml", ".json", ".xml", ".tf", ".hcl",
+    }
+
+    # Query about ops/infra? Then don't penalize those files
+    ops_keywords = {
+        "deploy", "service", "config", "install", "setup", "systemd",
+        "docker", "nginx", "grafana", "telegraf", "ansible", "terraform",
+        "ci", "cd", "pipeline", "infra", "infrastructure",
+    }
+    query_is_ops = bool(ops_keywords & set(words))
+
     # Source code files get a strong bonus over config/metadata
     source_entry_points = {
         "app.py": 40, "main.py": 40, "server.py": 35,
@@ -373,7 +395,9 @@ def find_relevant_files(query, file_list, prefs=None):
         name_no_ext = os.path.splitext(basename)[0]
         score = 0
 
-        # Exact filename mentioned in query
+        ext = f.get("ext", os.path.splitext(f["path"])[1]).lower()
+
+        # Exact filename mentioned in query — always relevant
         if basename in query_lower:
             score += 100
         if name_no_ext in query_lower and len(name_no_ext) >= 3:
@@ -387,7 +411,6 @@ def find_relevant_files(query, file_list, prefs=None):
                 score += 10
 
         # Extension-keyword association
-        ext = f.get("ext", os.path.splitext(f["path"])[1]).lower()
         for kw in ext_keywords.get(ext, []):
             if kw in query_lower:
                 score += 15
@@ -397,6 +420,20 @@ def find_relevant_files(query, file_list, prefs=None):
             score += source_entry_points[basename]
         elif basename in config_entry_points:
             score += config_entry_points[basename]
+
+        # Source code files get a natural boost
+        if ext in source_exts:
+            score += 10
+
+        # Penalize ops/infra files unless query is about ops
+        if not query_is_ops and ext in ops_exts:
+            score -= 50
+        # Penalize files in config/deploy/infra directories
+        if not query_is_ops:
+            for seg in ("config", "deploy", "infra", ".github"):
+                if seg in path_lower.split("/"):
+                    score -= 30
+                    break
 
         # Apply learned preferences
         file_path = f["path"]
